@@ -1,0 +1,76 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+next.user-config.*
+
+# Environment variables
+.env
+.env*.local
+
+# Local credentials and generated artifacts
+credentials.json
+client_secret_*.json
+*.db
+OAuth\ client\ ID.txt
+github-recovery-codes.txt
+
+# Development documentation (not for production)
+DAY_*.md
+DAY_*.txt
+SETUP_*.md
+TESTING_*.md
+CREDENTIAL_*.md
+VERIFICATION_*.md
+FILE_INVENTORY.md
+IMPLEMENTATION_STEPS.md
+SETUP_INDEX.md
+DEPLOYMENT_READY.md
+.codacy/
+
+# Setup scripts (local dev only)
+setup.bat
+setup.sh
+run_test.bat
+
+# Test files
+test_*.py
+test_*.ps1
+tmp_*.py
+
+# IDE and system files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+package-lock.json
+# Gradle cache
+.gradle/
+
+# Additional local/temp files and docs to ignore
+components.json
+aevum_ai.db
+badpaths.txt
+deleted_ls.txt
+deleted_paths.txt
+client_secret_*.json
+OAuth client ID.txt
+OAuth\ client\ ID.txt
+CREDENTIAL_SETUP_GUIDE.md
+DEPLOYMENT_READY.md
+FILE_INVENTORY.md
+IMPLEMENTATION_STEPS.md
+SETUP_INDEX.md
+QUICK_START.md
+START_HERE.md
+scripts/
+package-lock.json
