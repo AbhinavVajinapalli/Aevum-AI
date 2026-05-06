@@ -1,0 +1,22 @@
+.env
+.env.*
+*.db
+__pycache__/
+*.pyc
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/.vercel/
+
+# Python env/cache
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
