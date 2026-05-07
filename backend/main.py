@@ -23,11 +23,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import config
 from database import init_db
-from app.services import CalendarService, SchedulerService
-from app.agents import EventPublicityAgent
-from app.integrations.email_service import EmailService
-from app.integrations.linkedin_service import LinkedInService
-from app.schemas.event import EventSchema, CampaignSchema, ContentSchema, ApprovalSchema
+from services.calendar_service import CalendarService
+from services.scheduler_service import SchedulerService
+from agents.event_publicity_agent import EventPublicityAgent
+from integrations.email_service import EmailService
+from integrations.linkedin_service import LinkedInService
+from schemas.event import EventSchema, CampaignSchema, ContentSchema, ApprovalSchema
 
 
 # Initialize FastAPI app
@@ -111,7 +112,7 @@ async def health_check():
 @app.get("/api/events", tags=["Events"], response_model=List[Dict[str, Any]])
 async def get_events(
     limit: int = Query(10, ge=1, le=100),
-    stage: Optional[str] = Query(None, regex="^(pre_event|during_event|post_event)$")
+    stage: Optional[str] = Query(None, pattern="^(pre_event|during_event|post_event)$")
 ):
     """
     Get events from database

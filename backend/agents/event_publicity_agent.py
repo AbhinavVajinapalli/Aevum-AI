@@ -4,10 +4,13 @@ Makes autonomous decisions about content strategy, platforms, tone, and messagin
 """
 import json
 import uuid
+import warnings
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 try:
-    import google.generativeai as genai
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        import google.generativeai as genai
 except Exception:
     genai = None
 from config import config
