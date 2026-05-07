@@ -82,7 +82,9 @@ class Config:
     SCHEDULER_INTERVAL_HOURS = int(os.getenv("SCHEDULER_INTERVAL_HOURS", "6"))
 
     # Demo / production behavior
-    ALLOW_DEMO_MODE = os.getenv("ALLOW_DEMO_MODE", "False").lower() == "true"
+    # In hosted environments without calendar credentials, default to demo mode
+    # so the dashboard remains usable out-of-the-box.
+    ALLOW_DEMO_MODE = os.getenv("ALLOW_DEMO_MODE", "True").lower() == "true"
 
 
 config = Config()
