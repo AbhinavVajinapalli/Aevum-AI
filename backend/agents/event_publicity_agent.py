@@ -39,6 +39,7 @@ class EventPublicityAgent:
         """
         self.agent_id = f"agent_{uuid.uuid4().hex[:8]}"
         self.email_service = email_service
+        self.model_init_error = None
 
         # Configure Gemini if available and API key present
         gemini_key = getattr(config, 'GEMINI_API_KEY', '')
@@ -60,13 +61,15 @@ class EventPublicityAgent:
                         print(f"✓ Loaded Gemini model: {model_name}")
                         break
                     except Exception as e:
+                        self.model_init_error = f"{model_name}: {e}"
                         print(f"⚠ Model {model_name} failed: {e}")
                         continue
                 
                 if not self.model:
-                    print(f"❌ All Gemini models failed. API key may be invalid or quota exceeded.")
+                    print(f"❌ All Gemini models failed. Last error: {self.model_init_error}")
                     self.model = None
             except Exception as e:
+                self.model_init_error = str(e)
                 print(f"❌ Gemini configuration error: {e}")
                 self.model = None
         else:
@@ -141,6 +144,10 @@ class EventPublicityAgent:
             if config.ALLOW_DEMO_MODE:
                 result = self._build_fallback_response(event, lifecycle_stage)
             else:
+                if self.model_init_error:
+                    raise RuntimeError(
+                        f"Gemini model initialization failed: {self.model_init_error}"
+                    )
                 raise RuntimeError(
                     "Gemini API is not configured. Set GEMINI_API_KEY to run in full system mode."
                 )
