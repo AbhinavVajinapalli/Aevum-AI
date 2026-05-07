@@ -1,7 +1,7 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "https://aevum-ai.onrender.com" // fallback to deployed Render backend until Vercel env is set
+  "https://aevum-ai.onrender.com/api" // fallback to deployed Render backend API
 
 async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
