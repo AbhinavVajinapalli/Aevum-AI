@@ -16,6 +16,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from config import config
+from database import DB_PATH
 
 
 class CalendarService:
@@ -29,8 +30,8 @@ class CalendarService:
     def __init__(self):
         """Initialize Calendar service"""
         self.service = None
-        # Ensure we point to the same DB file used by backend/database.py (project root)
-        self.db_path = Path(__file__).resolve().parents[3] / "aevum_ai.db"
+        # Use the canonical DB path from database.py to avoid split SQLite files.
+        self.db_path = DB_PATH
         self._authenticate()
     
     def _authenticate(self):
