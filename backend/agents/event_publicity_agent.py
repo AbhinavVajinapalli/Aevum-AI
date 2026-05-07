@@ -41,27 +41,39 @@ class EventPublicityAgent:
         self.email_service = email_service
 
         # Configure Gemini if available and API key present
-        if genai and getattr(config, 'GEMINI_API_KEY', ''):
+        gemini_key = getattr(config, 'GEMINI_API_KEY', '')
+        if genai and gemini_key:
             try:
-                genai.configure(api_key=config.GEMINI_API_KEY)
-                # Prefer current Gemini models; fallback for older accounts.
+                genai.configure(api_key=gemini_key)
+                print(f"✓ Gemini API key configured")
+                
+                # Use stable, widely-available models
                 preferred_models = [
-                    'gemini-2.5-flash',
-                    'gemini-flash-latest',
-                    'gemini-1.5-flash',
-                    'gemini-1.5-pro',
-                    'gemini-pro',
+                    'gemini-1.5-flash',      # Most stable, free tier
+                    'gemini-1.5-pro',        # High quality fallback
+                    'gemini-pro',            # Legacy fallback
                 ]
                 self.model = None
                 for model_name in preferred_models:
                     try:
                         self.model = genai.GenerativeModel(model_name)
+                        print(f"✓ Loaded Gemini model: {model_name}")
                         break
-                    except Exception:
+                    except Exception as e:
+                        print(f"⚠ Model {model_name} failed: {e}")
                         continue
-            except Exception:
+                
+                if not self.model:
+                    print(f"❌ All Gemini models failed. API key may be invalid or quota exceeded.")
+                    self.model = None
+            except Exception as e:
+                print(f"❌ Gemini configuration error: {e}")
                 self.model = None
         else:
+            if not genai:
+                print("⚠ google-generativeai library not imported")
+            if not gemini_key:
+                print("⚠ GEMINI_API_KEY not set")
             self.model = None
     
     def analyze_and_generate_content(

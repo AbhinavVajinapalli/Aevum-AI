@@ -8,6 +8,7 @@ __pycache__/
 frontend/node_modules/
 frontend/.next/
 frontend/.vercel/
+.next/
 
 # Python env/cache
 .venv/
@@ -20,3 +21,12 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+
+# Accidental local credential exports
+OAuth client ID.txt
+client_secret_*.json
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
+node_modules
