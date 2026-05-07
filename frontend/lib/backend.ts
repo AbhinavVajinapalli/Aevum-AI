@@ -1,6 +1,11 @@
+function normalizeApiBaseUrl(rawUrl?: string) {
+  if (!rawUrl) return undefined
+  return rawUrl.replace(/\/$/, "").replace(/\/api$/, "") + "/api"
+}
+
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
+  normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ||
+  normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL) ||
   "https://aevum-ai.onrender.com/api" // fallback to deployed Render backend API
 
 async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
