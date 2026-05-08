@@ -96,6 +96,7 @@ export type IntegrationStatus = {
   smtp: { configured: boolean; mode: string }
   gemini: { configured: boolean; mode: string }
   calendar: { configured: boolean; mode: string }
+  telegram: { configured: boolean; mode: string; bot_link?: string }
 }
 
 export type DashboardSnapshot = {
@@ -161,17 +162,36 @@ export async function rejectContent(contentId: string, reason = "Rejected via da
 
 export async function publishEmail(
   contentId: string,
-  recipient = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "test@example.com",
+  recipient?: string,
   useHtml = true,
 ) {
+  const query = new URLSearchParams()
+  if (recipient) query.set("recipient", recipient)
+  query.set("use_html", useHtml ? "true" : "false")
   return requestApi(
-    `/content/${encodeURIComponent(contentId)}/publish/email?recipient=${encodeURIComponent(recipient)}&use_html=${useHtml ? "true" : "false"}`,
+    `/content/${encodeURIComponent(contentId)}/publish/email?${query.toString()}`,
     { method: "POST" }
   )
 }
 
 export async function publishLinkedIn(contentId: string) {
   return requestApi(`/content/${encodeURIComponent(contentId)}/publish/linkedin`, {
+    method: "POST",
+  })
+}
+
+export async function publishWhatsApp(contentId: string, toNumber?: string) {
+  const query = new URLSearchParams()
+  if (toNumber) query.set("recipient", toNumber)
+  return requestApi(`/content/${encodeURIComponent(contentId)}/publish/whatsapp?${query.toString()}`, {
+    method: "POST",
+  })
+}
+
+export async function publishTelegram(contentId: string, chatId?: string) {
+  const query = new URLSearchParams()
+  if (chatId) query.set("chat_id", chatId)
+  return requestApi(`/content/${encodeURIComponent(contentId)}/publish/telegram?${query.toString()}`, {
     method: "POST",
   })
 }

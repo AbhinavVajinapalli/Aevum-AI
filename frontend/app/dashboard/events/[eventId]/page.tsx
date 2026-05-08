@@ -28,6 +28,8 @@ import {
   getIntegrationsStatus,
   publishEmail,
   publishLinkedIn,
+  publishWhatsApp,
+  publishTelegram,
   type IntegrationStatus,
   type BackendCampaignDetail,
   type BackendContentItem,
@@ -254,11 +256,17 @@ export default function EventDetailPage() {
                 await bulkApproveContent(ids, defaultActor)
                 const canSendEmail = integrations?.smtp.configured ?? false
                 for (const draft of selectedDrafts) {
-                  if (draft.selected.platform === "email" && canSendEmail) {
+                  if (draft.selected.platform === "email") {
                     await publishEmail(draft.selected.id)
                   }
                   if (draft.selected.platform === "linkedin") {
                     await publishLinkedIn(draft.selected.id)
+                  }
+                  if (draft.selected.platform === "whatsapp") {
+                    await publishWhatsApp(draft.selected.id)
+                  }
+                  if (draft.selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
+                    await publishTelegram(draft.selected.id)
                   }
                 }
                 const refreshed = await getCampaignDetail(campaign.campaign.id)
@@ -453,11 +461,17 @@ export default function EventDetailPage() {
                         try {
                           setWorkingPlatform(platform)
                           await approveContent(selected.id, defaultActor)
-                          if (selected.platform === "email" && (integrations?.smtp.configured ?? false)) {
+                          if (selected.platform === "email") {
                             await publishEmail(selected.id)
                           }
                           if (selected.platform === "linkedin") {
                             await publishLinkedIn(selected.id)
+                          }
+                          if (selected.platform === "whatsapp") {
+                            await publishWhatsApp(selected.id)
+                          }
+                          if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
+                            await publishTelegram(selected.id)
                           }
                           const refreshed = await getCampaignDetail(campaign.campaign.id)
                           setCampaign(refreshed)
@@ -472,6 +486,46 @@ export default function EventDetailPage() {
                     >
                       <CheckCircle2 className="mr-2 h-4 w-4" />
                       Approve draft
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          setWorkingPlatform(platform)
+                          await publishWhatsApp(selected.id)
+                          const refreshed = await getCampaignDetail(campaign.campaign.id)
+                          setCampaign(refreshed)
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Failed to send WhatsApp")
+                        } finally {
+                          setWorkingPlatform(null)
+                        }
+                      }}
+                      disabled={workingPlatform === platform}
+                    >
+                      <MessageSquareMore className="mr-2 h-4 w-4" />
+                      Send WhatsApp
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          setWorkingPlatform(platform)
+                          await publishTelegram(selected.id)
+                          const refreshed = await getCampaignDetail(campaign.campaign.id)
+                          setCampaign(refreshed)
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Failed to send Telegram")
+                        } finally {
+                          setWorkingPlatform(null)
+                        }
+                      }}
+                      disabled={workingPlatform === platform}
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Telegram
                     </Button>
                   </div>
 

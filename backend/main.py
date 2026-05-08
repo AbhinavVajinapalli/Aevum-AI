@@ -28,6 +28,8 @@ from services.scheduler_service import SchedulerService
 from agents.event_publicity_agent import EventPublicityAgent
 from integrations.email_service import EmailService
 from integrations.linkedin_service import LinkedInService
+from integrations.telegram_service import TelegramService
+from integrations.whatsapp_service import WhatsAppService
 from schemas.event import EventSchema, CampaignSchema, ContentSchema, ApprovalSchema
 
 
@@ -61,8 +63,11 @@ scheduler_service = SchedulerService(
 )
 # Initialize LinkedIn service for publishing
 linkedin_service = LinkedInService()
+telegram_service = TelegramService()
 # In-memory PKCE verifier store for local OAuth callback exchange
 linkedin_pkce_store: Dict[str, str] = {}
+# Initialize WhatsApp service (Twilio)
+whatsapp_service = WhatsAppService()
 
 
 # ============================================================================
@@ -155,6 +160,64 @@ async def get_event_detail(event_id: str):
             raise HTTPException(status_code=404, detail="Event not found")
         
         return dict(event)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/content/{content_id}/publish/whatsapp", tags=["Publish"])
+async def publish_whatsapp(content_id: int, recipient: str, message: Optional[str] = None):
+    """Publish content via WhatsApp using Twilio Sandbox/SDK.
+
+    `recipient` should be an E.164 phone number (e.g. +15558675310) — the code
+    will add the `whatsapp:` prefix automatically.
+    """
+    # TODO: reuse your existing approval check for content_id here
+    text = message or "Update from Aevum AI"
+    try:
+        resp = whatsapp_service.send_message(recipient, text)
+        return {"status": "ok", "twilio": resp}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"WhatsApp send failed: {e}")
+
+
+@app.post("/api/content/{content_id}/publish/telegram", tags=["Publishing"])
+async def publish_telegram(content_id: str, chat_id: Optional[str] = Query(None), message: Optional[str] = Query(None)):
+    """Send approved content via Telegram."""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+        content_row = cursor.fetchone()
+
+        if not content_row:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        content = dict(content_row)
+        if content['approval_status'] != 'approved':
+            raise HTTPException(status_code=400, detail="Content must be approved before sending")
+
+        text = message or content.get('content_text') or 'Update from Aevum AI'
+        result = telegram_service.send_message(chat_id, text)
+
+        analytics_id = f"anal_{uuid.uuid4().hex[:8]}"
+        cursor.execute("""
+            INSERT INTO analytics (id, platform, content_id, status, sent_at, response_status)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        """, (analytics_id, 'telegram', content_id, 'sent', 200))
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "success",
+            "content_id": content_id,
+            "chat_id": chat_id or telegram_service.default_chat_id,
+            "message_id": result.get("message_id"),
+            "message": "Telegram message sent successfully"
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -513,7 +576,7 @@ async def bulk_approve_content(
 @app.post("/api/content/{content_id}/publish/email", tags=["Publishing"])
 async def publish_email(
     content_id: str,
-    recipient: str = Query(..., description="Email recipient address"),
+    recipient: Optional[str] = Query(None, description="Email recipient address"),
     use_html: bool = Query(True, description="Send as HTML email")
 ):
     """Send approved content via email"""
@@ -545,7 +608,14 @@ async def publish_email(
                 detail="SMTP is not configured. Set SMTP_USERNAME and SMTP_PASSWORD, or EMAIL_SENDER and EMAIL_PASSWORD, to enable email publishing."
             )
 
-        sent = email_service.send_email(recipient, subject, body, html=use_html)
+        resolved_recipient = (recipient or config.DEFAULT_ACCOUNT_EMAIL or email_service.smtp_user or "").strip()
+        if not resolved_recipient:
+            raise HTTPException(
+                status_code=400,
+                detail="No email recipient configured. Set DEFAULT_ACCOUNT_EMAIL or pass recipient in the request."
+            )
+
+        sent = email_service.send_email(resolved_recipient, subject, body, html=use_html)
         
         # Record in analytics
         if sent:
@@ -561,7 +631,7 @@ async def publish_email(
         return {
             "status": "success" if sent else "failed",
             "content_id": content_id,
-            "recipient": recipient,
+            "recipient": resolved_recipient,
             "message": "Email sent successfully" if sent else "Email send failed"
         }
     except HTTPException:
@@ -655,6 +725,11 @@ async def get_integrations_status():
         "calendar": {
             "configured": bool(config.GOOGLE_CALENDAR_ID),
             "mode": "live" if config.GOOGLE_CALENDAR_ID else "missing"
+        },
+        "telegram": {
+            "configured": telegram_service.is_configured(),
+            "mode": "live" if telegram_service.is_configured() else "missing",
+            "bot_link": telegram_service.bot_link()
         }
     }
 

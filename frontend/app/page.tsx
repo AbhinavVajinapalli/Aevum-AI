@@ -1,9 +1,11 @@
 "use client"
 
 import Image from "next/image"
-import { ArrowRight, Zap, Brain, Share2, BarChart3 } from "lucide-react"
+import { ArrowRight, Zap, Brain, Share2, BarChart3, Send } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+
+const telegramUrl = process.env.NEXT_PUBLIC_TELEGRAM_BOT_URL || "https://t.me/aevum_ai_bot"
 
 export default function LandingPage() {
   return (
@@ -23,11 +25,9 @@ export default function LandingPage() {
             </div>
             <span className="font-bold text-lg">Aevum AI</span>
           </div>
-          <Link href="/dashboard">
-            <Button variant="outline" className="border-white/20 hover:bg-white/10">
-              Dashboard
-            </Button>
-          </Link>
+          <Button asChild variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/15">
+            <Link href="/dashboard">Dashboard</Link>
+          </Button>
         </div>
       </header>
 
@@ -44,16 +44,19 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/dashboard">
-              <Button size="lg" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+            <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500">
+              <Link href="/dashboard">
                 Get Started <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="#features">
-              <Button size="lg" variant="outline" className="border-white/20 hover:bg-white/10">
-                Learn More
-              </Button>
-            </Link>
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-white/25 bg-white/5 text-white hover:bg-white/15">
+              <Link href="#features">Learn More</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-emerald-300/30 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/20">
+              <Link href={telegramUrl} target="_blank" rel="noreferrer">
+                Telegram Bot <Send className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
 
           <div className="grid grid-cols-3 gap-4 text-sm text-white/60 pt-8 border-t border-white/10">
@@ -68,6 +71,10 @@ export default function LandingPage() {
             <div>
               <div className="font-semibold text-white">Multi-platform</div>
               <div>Publishing</div>
+            </div>
+            <div>
+              <div className="font-semibold text-white">Chat-first</div>
+              <div>Telegram bot</div>
             </div>
           </div>
         </div>
@@ -84,25 +91,25 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-4 p-6 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/5 transition">
+            <div className="space-y-4 p-6 rounded-xl border border-white/10 bg-white/5 shadow-xl shadow-black/10 hover:border-white/20 hover:bg-white/8 transition">
               <Zap className="h-8 w-8 text-blue-400" />
               <h3 className="text-xl font-semibold">Instant Event Sync</h3>
               <p className="text-white/60">Automatically fetch and sync events from Google Calendar in real-time.</p>
             </div>
 
-            <div className="space-y-4 p-6 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/5 transition">
+            <div className="space-y-4 p-6 rounded-xl border border-white/10 bg-white/5 shadow-xl shadow-black/10 hover:border-white/20 hover:bg-white/8 transition">
               <Brain className="h-8 w-8 text-purple-400" />
               <h3 className="text-xl font-semibold">AI Content Generation</h3>
               <p className="text-white/60">Generate personalized marketing content for each event using Gemini AI.</p>
             </div>
 
-            <div className="space-y-4 p-6 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/5 transition">
+            <div className="space-y-4 p-6 rounded-xl border border-white/10 bg-white/5 shadow-xl shadow-black/10 hover:border-white/20 hover:bg-white/8 transition">
               <Share2 className="h-8 w-8 text-green-400" />
               <h3 className="text-xl font-semibold">Multi-Platform Publishing</h3>
-              <p className="text-white/60">Approve and publish to LinkedIn and Email with a single click.</p>
+              <p className="text-white/60">Approve and publish to LinkedIn, Email, WhatsApp, and Telegram from one flow.</p>
             </div>
 
-            <div className="space-y-4 p-6 rounded-lg border border-white/10 hover:border-white/20 hover:bg-white/5 transition">
+            <div className="space-y-4 p-6 rounded-xl border border-white/10 bg-white/5 shadow-xl shadow-black/10 hover:border-white/20 hover:bg-white/8 transition">
               <BarChart3 className="h-8 w-8 text-orange-400" />
               <h3 className="text-xl font-semibold">Analytics Dashboard</h3>
               <p className="text-white/60">Track events, campaigns, approvals, and publishing metrics in real-time.</p>
@@ -116,11 +123,18 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto text-center space-y-6">
           <h2 className="text-3xl font-bold">Ready to streamline your event promotion?</h2>
           <p className="text-white/60">Start automating your workflow today.</p>
-          <Link href="/dashboard">
-            <Button size="lg" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-              Launch Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500">
+              <Link href="/dashboard">
+                Launch Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
-          </Link>
+            <Button asChild size="lg" variant="outline" className="border-white/25 bg-white/5 text-white hover:bg-white/15">
+              <Link href={telegramUrl} target="_blank" rel="noreferrer">
+                Open Telegram Bot <Send className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
 

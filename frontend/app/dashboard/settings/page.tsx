@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Key, Globe, Mail, CalendarDays } from "lucide-react"
+import { Key, Globe, Mail, CalendarDays, Send } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getIntegrationsStatus, type IntegrationStatus } from "@/lib/backend"
@@ -36,6 +36,7 @@ export default function SettingsPage() {
           { key: "gemini", icon: Key, label: "Gemini" },
           { key: "smtp", icon: Mail, label: "SMTP" },
           { key: "linkedin", icon: Globe, label: "LinkedIn" },
+          { key: "telegram", icon: Send, label: "Telegram" },
         ].map((item) => {
           const mode = integrations?.[item.key as keyof IntegrationStatus]?.mode || "unknown"
           const configured = integrations?.[item.key as keyof IntegrationStatus]?.configured ? "configured" : "missing"
@@ -71,6 +72,7 @@ export default function SettingsPage() {
           <div><code>GEMINI_API_KEY</code></div>
           <div><code>SMTP_USERNAME</code> and <code>SMTP_PASSWORD</code> or <code>EMAIL_SENDER</code> and <code>EMAIL_PASSWORD</code></div>
           <div><code>LINKEDIN_ACCESS_TOKEN</code></div>
+          <div><code>TELEGRAM_BOT_TOKEN</code> and optionally <code>TELEGRAM_CHAT_ID</code></div>
           <div><code>ALLOW_DEMO_MODE=False</code></div>
         </CardContent>
       </Card>
