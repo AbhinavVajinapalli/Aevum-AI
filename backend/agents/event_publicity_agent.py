@@ -11,7 +11,9 @@ try:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
         import google.generativeai as genai
-except Exception:
+except Exception as e:
+    import sys
+    print(f"❌ Failed to import google.generativeai: {e}", file=sys.stderr)
     genai = None
 from config import config
 
