@@ -99,7 +99,7 @@ class EventPublicityAgent:
             {
                 "event_analysis": str,
                 "audience": str,
-                "platforms": ["twitter", "email", "linkedin"],
+                "platforms": ["email", "linkedin", "whatsapp", "telegram"],
                 "tone": str,
                 "content_strategy": str,
                 "variations": [
@@ -206,7 +206,7 @@ RESPOND IN JSON FORMAT ONLY (no other text):
 {{
     "event_analysis": "Your analysis of the event type, target audience, and key selling points (2-3 sentences)",
     "audience": "Who should this event appeal to?",
-    "platforms": ["email", "linkedin"],
+    "platforms": ["email", "linkedin", "whatsapp", "telegram"],
     "tone": "formal",
     "content_strategy": "Your strategy for this event in this lifecycle stage (1-2 sentences)",
     "variations": [
@@ -225,6 +225,22 @@ RESPOND IN JSON FORMAT ONLY (no other text):
             "variation_3": "LinkedIn post variation 3 (150-200 chars)",
             "hashtags": ["#event", "#professionals"],
             "scheduled_time": "08:00"
+        }},
+        {{
+            "platform": "whatsapp",
+            "variation_1": "Short WhatsApp message variation 1 with a clear call to action",
+            "variation_2": "Short WhatsApp message variation 2 with a clear call to action",
+            "variation_3": "Short WhatsApp message variation 3 with a clear call to action",
+            "hashtags": ["#event", "#community"],
+            "scheduled_time": "10:00"
+        }},
+        {{
+            "platform": "telegram",
+            "variation_1": "Concise Telegram update variation 1 with key event details",
+            "variation_2": "Concise Telegram update variation 2 with key event details",
+            "variation_3": "Concise Telegram update variation 3 with key event details",
+            "hashtags": ["#event", "#updates"],
+            "scheduled_time": "11:00"
         }}
     ]
 }}
@@ -233,9 +249,10 @@ IMPORTANT:
 1. Generate 3 variations per platform - different angles/hooks
 2. For email: Start with "Subject:" in each variation
 3. For LinkedIn: Keep content professional, 150-200 characters each
-4. Include relevant hashtags (3-5 per platform)
-5. Suggest optimal posting times based on platform and audience
-6. Match tone to audience and lifecycle stage
+4. For WhatsApp and Telegram: keep messages concise, mobile-friendly, and action-oriented
+5. Include relevant hashtags (3-5 per platform)
+6. Suggest optimal posting times based on platform and audience
+7. Match tone to audience and lifecycle stage
 """
         return prompt
     
@@ -244,7 +261,7 @@ IMPORTANT:
         base = {
             "event_analysis": f"University {event.get('event_type', 'event')}: {event.get('title', 'Upcoming Event')}",
             "audience": "Students, faculty, and staff",
-            "platforms": ["email", "linkedin"],
+            "platforms": ["email", "linkedin", "whatsapp", "telegram"],
             "tone": "professional",
             "content_strategy": f"Strategic promotion for {lifecycle_stage} stage",
             "variations": [
@@ -263,6 +280,22 @@ IMPORTANT:
                     "variation_3": f"Mark your calendars! {event.get('title', 'Our event')} is coming to you.",
                     "hashtags": ["#event", "#learning"],
                     "scheduled_time": "08:00"
+                },
+                {
+                    "platform": "whatsapp",
+                    "variation_1": f"Join us for {event.get('title', 'our event')}! Save your spot and get the latest updates.",
+                    "variation_2": f"Reminder: {event.get('title', 'our event')} is coming up. Don't miss out.",
+                    "variation_3": f"Quick update: {event.get('title', 'our event')} is almost here. Be ready to join.",
+                    "hashtags": ["#event", "#updates"],
+                    "scheduled_time": "10:00"
+                },
+                {
+                    "platform": "telegram",
+                    "variation_1": f"{event.get('title', 'Event')} is now live. Check the details and join the conversation.",
+                    "variation_2": f"Telegram update: {event.get('title', 'our event')} is coming soon. Stay tuned for the agenda.",
+                    "variation_3": f"Don't miss {event.get('title', 'our event')}. Here's your quick update and reminder.",
+                    "hashtags": ["#event", "#announcements"],
+                    "scheduled_time": "11:00"
                 }
             ]
         }

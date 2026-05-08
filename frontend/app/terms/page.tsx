@@ -111,7 +111,7 @@ export default function TermsPage() {
             <h2 className="text-2xl font-semibold mb-4">12. Contact Information</h2>
             <p className="text-white/80">
               If you have any questions about these Terms and Conditions, please contact us at:<br />
-              <strong>Email:</strong> vajinapalli.abhinav@gmail.com
+              <strong>Email:</strong> 2303a52486@sru.edu.in
             </p>
           </section>
         </div>

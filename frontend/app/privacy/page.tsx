@@ -118,7 +118,7 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-semibold mb-4">9. Contact Us</h2>
             <p className="text-white/80">
               If you have questions about this Privacy Policy or our privacy practices, please contact us at:<br />
-              <strong>Email:</strong> vajinapalli.abhinav@gmail.com<br />
+              <strong>Email:</strong> 2303a52486@sru.edu.in<br />
               <strong>Phone:</strong> +91-XXXXXXXXXX (if available)
             </p>
           </section>

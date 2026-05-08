@@ -70,7 +70,7 @@ const secondaryNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const accountEmail = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "vajinapalli.abhinav@gmail.com"
+  const accountEmail = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "2303a52486@sru.edu.in"
   const accountInitials = accountEmail
     .split("@")[0]
     .split(/[._-]/)

@@ -58,12 +58,15 @@ function stageLabel(stage: BackendEvent["lifecycle_stage"]) {
 function platformLabel(platform: string) {
   if (platform === "linkedin") return "LinkedIn"
   if (platform === "email") return "Email"
+  if (platform === "whatsapp") return "WhatsApp"
+  if (platform === "telegram") return "Telegram"
   return platform
 }
 
 function platformIcon(platform: string) {
   if (platform === "linkedin") return <Megaphone className="h-4 w-4" />
   if (platform === "email") return <Mail className="h-4 w-4" />
+  if (platform === "whatsapp" || platform === "telegram") return <MessageSquareMore className="h-4 w-4" />
   return <MessageSquareMore className="h-4 w-4" />
 }
 
@@ -197,7 +200,7 @@ export default function EventDetailPage() {
 
   const lifecycleSteps = useMemo(() => getLifecycleSteps(event), [event])
 
-  const defaultActor = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "dashboard-user"
+  const defaultActor = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "2303a52486@sru.edu.in"
 
   if (loading) {
     return (

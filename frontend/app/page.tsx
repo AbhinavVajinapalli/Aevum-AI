@@ -146,7 +146,7 @@ export default function LandingPage() {
             <div className="flex gap-6">
               <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
               <Link href="/terms" className="hover:text-white transition">Terms &amp; Conditions</Link>
-              <a href="mailto:vajinapalli.abhinav@gmail.com" className="hover:text-white transition">Contact</a>
+              <a href="mailto:2303a52486@sru.edu.in" className="hover:text-white transition">Contact</a>
             </div>
           </div>
         </div>
