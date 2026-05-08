@@ -10,6 +10,7 @@ import {
   Bell,
   Settings,
   HelpCircle,
+  Sparkles,
 } from "lucide-react"
 
 import {
