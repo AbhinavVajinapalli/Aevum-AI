@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { RefreshCw, Calendar, Clock, Sparkles, Send, AlertCircle } from "lucide-react"
+import { Calendar, Clock, Sparkles, Send, AlertCircle } from "lucide-react"
 import { StatCard } from "@/components/dashboard/stat-card"
 import { ActivityFeed } from "@/components/dashboard/activity-feed"
 import { UpcomingEvents } from "@/components/dashboard/upcoming-events"
@@ -166,17 +166,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setRefreshing(true)
-            loadSnapshot()
-          }}
-          className="w-fit"
-        >
-          <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
-          Refresh
-        </Button>
+
       </div>
 
       {error && (

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, Sparkles, AlertCircle, RefreshCw, Sparkles as SparklesIcon, X } from "lucide-react"
+import { CheckCircle2, Sparkles, AlertCircle, Sparkles as SparklesIcon, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -84,9 +84,7 @@ export default function EventsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Events</h1>
           <p className="text-muted-foreground">Live events from Google Calendar or configured source</p>
         </div>
-        <Button onClick={load} variant="outline">
-          <RefreshCw className="mr-2 h-4 w-4" /> Refresh
-        </Button>
+
       </div>
 
       <div className="flex flex-col gap-3 sm:max-w-md">

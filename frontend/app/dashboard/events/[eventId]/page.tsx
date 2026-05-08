@@ -10,7 +10,6 @@ import {
   Mail,
   MessageSquareMore,
   Megaphone,
-  RefreshCw,
   Send,
   Sparkles,
 } from "lucide-react"
@@ -134,6 +133,8 @@ export default function EventDetailPage() {
   const [selectedVariationByPlatform, setSelectedVariationByPlatform] = useState<Record<string, number>>({})
   const [approvedDraftIds, setApprovedDraftIds] = useState<Record<string, boolean>>({})
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editedText, setEditedText] = useState<string>("")  
 
   useEffect(() => {
     const load = async () => {
@@ -414,9 +415,47 @@ export default function EventDetailPage() {
                   </div>
 
                   <div className="mt-4 rounded-xl border bg-muted/20 p-4">
-                    <ScrollArea className="max-h-[320px] pr-3">
-                      <pre className="whitespace-pre-wrap text-sm leading-6 text-foreground">{selected.content_text}</pre>
-                    </ScrollArea>
+                    {editingId === selected.id ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={editedText}
+                          onChange={(e) => setEditedText(e.target.value)}
+                          className="h-40 w-full rounded-lg border bg-background p-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="Edit your draft..."
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              // Save edited text (update optimistically)
+                              setCampaign((prev) => {
+                                if (!prev) return prev
+                                return {
+                                  ...prev,
+                                  content: prev.content.map((c) =>
+                                    c.id === selected.id ? { ...c, content_text: editedText } : c
+                                  ),
+                                }
+                              })
+                              setEditingId(null)
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <ScrollArea className="max-h-[320px] pr-3">
+                        <pre className="whitespace-pre-wrap text-sm leading-6 text-foreground">{selected.content_text}</pre>
+                      </ScrollArea>
+                    )}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -482,50 +521,21 @@ export default function EventDetailPage() {
                           setWorkingPlatform(null)
                         }
                       }}
-                      disabled={workingPlatform === platform}
+                      disabled={workingPlatform === platform || approved}
                     >
                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Approve draft
+                      {approved ? "Approved" : "Approve draft"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={async () => {
-                        try {
-                          setWorkingPlatform(platform)
-                          await publishWhatsApp(selected.id)
-                          const refreshed = await getCampaignDetail(campaign.campaign.id)
-                          setCampaign(refreshed)
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to send WhatsApp")
-                        } finally {
-                          setWorkingPlatform(null)
-                        }
+                      onClick={() => {
+                        setEditingId(selected.id)
+                        setEditedText(selected.content_text)
                       }}
-                      disabled={workingPlatform === platform}
+                      disabled={approved}
                     >
-                      <MessageSquareMore className="mr-2 h-4 w-4" />
-                      Send WhatsApp
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          setWorkingPlatform(platform)
-                          await publishTelegram(selected.id)
-                          const refreshed = await getCampaignDetail(campaign.campaign.id)
-                          setCampaign(refreshed)
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to send Telegram")
-                        } finally {
-                          setWorkingPlatform(null)
-                        }
-                      }}
-                      disabled={workingPlatform === platform}
-                    >
-                      <Send className="mr-2 h-4 w-4" />
-                      Send Telegram
+                      Edit
                     </Button>
                   </div>
 
@@ -544,7 +554,7 @@ export default function EventDetailPage() {
             </div>
             <Button variant="outline" asChild>
               <Link href="/dashboard/events">
-                <RefreshCw className="mr-2 h-4 w-4" /> Back to Events
+                Back to Events
               </Link>
             </Button>
           </div>
