@@ -30,17 +30,17 @@ class SchedulerService:
             return
             
         try:
-            # Add job for periodic event sync from Google Calendar (every 3 hours)
+            # Add job for periodic event sync from Google Calendar (every 1 hour)
             if self.calendar_service:
                 self.scheduler.add_job(
                     self.sync_calendar_events,
                     'interval',
-                    hours=3,
+                    hours=1,
                     id='sync_calendar_events',
                     name='Sync events from Google Calendar',
                     replace_existing=True
                 )
-                print(f"✓ Calendar sync scheduled every 3 hours")
+                print(f"✓ Calendar sync scheduled every 1 hour")
             
             # Add job for auto-generate campaigns (every N hours as configured)
             self.scheduler.add_job(
