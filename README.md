@@ -68,8 +68,7 @@ Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini,
 	  - `GOOGLE_CLIENT_ID`
 	  - `GOOGLE_CLIENT_SECRET`
 	  - `GEMINI_API_KEY`
-	  - `EMAIL_SENDER`
-	  - `EMAIL_PASSWORD`
+		- `SMTP_USERNAME` and `SMTP_PASSWORD` (or the backward-compatible aliases `EMAIL_SENDER` and `EMAIL_PASSWORD`)
 	  - `DATABASE_URL` (optional; defaults to SQLite)
 	- Click "Deploy"
 
@@ -149,6 +148,11 @@ Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini,
 - Update redirect URIs in OAuth provider console
 - Verify env vars set in hosting platform
 - Check frontend `NEXT_PUBLIC_API_BASE_URL` points to correct backend
+
+**Email publishing fails with SMTP errors:**
+- Set `SMTP_USERNAME` and `SMTP_PASSWORD` in Render
+- Older deployments can also use `EMAIL_SENDER` and `EMAIL_PASSWORD`
+- Restart the backend after updating mail credentials
 
 **CORS errors:**
 - Backend `main.py` should allow frontend origin

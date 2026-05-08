@@ -542,7 +542,7 @@ async def publish_email(
         if not email_service.smtp_user or not email_service.smtp_pass:
             raise HTTPException(
                 status_code=400,
-                detail="SMTP is not configured. Set SMTP_USERNAME and SMTP_PASSWORD to enable email publishing."
+                detail="SMTP is not configured. Set SMTP_USERNAME and SMTP_PASSWORD, or EMAIL_SENDER and EMAIL_PASSWORD, to enable email publishing."
             )
 
         sent = email_service.send_email(recipient, subject, body, html=use_html)

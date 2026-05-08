@@ -32,7 +32,19 @@ GEMINI_API_KEY=your-api-key-here
 ```
 Get key: https://aistudio.google.com/app/apikeys
 
-#### Option B: Skip API for Demo
+#### Option B: Configure Email Publishing
+If you want approved content to send email drafts automatically, set:
+```
+SMTP_USERNAME=your-email@example.com
+SMTP_PASSWORD=your-app-password
+```
+Legacy aliases are also accepted by the backend:
+```
+EMAIL_SENDER=your-email@example.com
+EMAIL_PASSWORD=your-app-password
+```
+
+#### Option C: Skip API for Demo
 Leave `GEMINI_API_KEY=your-gemini-api-key` (system will use fallback mock agent)
 
 ### Step 4: Initialize Database
@@ -135,7 +147,7 @@ backend/
 
 ### Day 2: EventPublicityAgent + Email
 - [ ] Complete agent intelligence (platform selection, tone, hashtags)
-- [ ] Email sending (Gmail SMTP)
+- [ ] Email sending (Gmail SMTP or the `EMAIL_SENDER` / `EMAIL_PASSWORD` aliases)
 - [ ] Multi-variation generation (3 per platform)
 - [ ] Hashtag generation via Gemini
 

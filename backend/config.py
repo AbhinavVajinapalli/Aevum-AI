@@ -40,8 +40,8 @@ class Config:
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
     # Default account email set to user's requested address
-    SMTP_USERNAME = os.getenv("SMTP_USERNAME", "2303a52486@sru.edu.in")
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USERNAME = os.getenv("SMTP_USERNAME", os.getenv("EMAIL_SENDER", "2303a52486@sru.edu.in"))
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", os.getenv("EMAIL_PASSWORD", ""))
     EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Aevum AI")
     TEAM_EMAIL = os.getenv("TEAM_EMAIL", "")
 

@@ -69,7 +69,7 @@ export default function SettingsPage() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <div><code>GOOGLE_CREDENTIALS_PATH</code> and <code>GOOGLE_CALENDAR_ID</code></div>
           <div><code>GEMINI_API_KEY</code></div>
-          <div><code>SMTP_USERNAME</code> and <code>SMTP_PASSWORD</code></div>
+          <div><code>SMTP_USERNAME</code> and <code>SMTP_PASSWORD</code> or <code>EMAIL_SENDER</code> and <code>EMAIL_PASSWORD</code></div>
           <div><code>LINKEDIN_ACCESS_TOKEN</code></div>
           <div><code>ALLOW_DEMO_MODE=False</code></div>
         </CardContent>

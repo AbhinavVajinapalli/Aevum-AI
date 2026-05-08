@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { ArrowRight, Zap, Brain, Share2, BarChart3 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -11,8 +12,14 @@ export default function LandingPage() {
       <header className="border-b border-white/10 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-600 rounded-lg flex items-center justify-center font-bold text-sm">
-              AI
+            <div className="relative h-10 w-10 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80">
+              <Image
+                src="/logo-dark.png"
+                alt="Aevum AI logo"
+                fill
+                className="object-cover"
+                priority
+              />
             </div>
             <span className="font-bold text-lg">Aevum AI</span>
           </div>

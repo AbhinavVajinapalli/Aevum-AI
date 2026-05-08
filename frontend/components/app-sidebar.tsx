@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   Calendar,
-  Sparkles,
   BarChart3,
   Bell,
   Settings,
@@ -85,8 +85,15 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Sparkles className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg border border-sidebar-border bg-sidebar-accent">
+                  <Image
+                    src="/logo-dark.png"
+                    alt="Aevum AI logo"
+                    width={32}
+                    height={32}
+                    className="h-full w-full object-cover"
+                    priority
+                  />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Aevum AI</span>

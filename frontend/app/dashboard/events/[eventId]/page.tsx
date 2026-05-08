@@ -25,8 +25,10 @@ import {
   getCampaignDetail,
   getCampaigns,
   getEventDetail,
+  getIntegrationsStatus,
   publishEmail,
   publishLinkedIn,
+  type IntegrationStatus,
   type BackendCampaignDetail,
   type BackendContentItem,
   type BackendEvent,
@@ -129,6 +131,7 @@ export default function EventDetailPage() {
   const [workingPlatform, setWorkingPlatform] = useState<string | null>(null)
   const [selectedVariationByPlatform, setSelectedVariationByPlatform] = useState<Record<string, number>>({})
   const [approvedDraftIds, setApprovedDraftIds] = useState<Record<string, boolean>>({})
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -138,12 +141,14 @@ export default function EventDetailPage() {
         setLoading(true)
         setError(null)
 
-        const [eventDetail, campaignSummaries] = await Promise.all([
+        const [eventDetail, campaignSummaries, integrationStatus] = await Promise.all([
           getEventDetail(eventId),
           getCampaigns(100),
+          getIntegrationsStatus(),
         ])
 
         setEvent(eventDetail)
+        setIntegrations(integrationStatus)
 
         const existingSummary = campaignSummaries.find((item) => item.event_id === eventId)
         let detail: BackendCampaignDetail | null = null
@@ -247,8 +252,9 @@ export default function EventDetailPage() {
                 const ids = selectedDrafts.map((item) => item.selected.id)
                 if (!ids.length) return
                 await bulkApproveContent(ids, defaultActor)
+                const canSendEmail = integrations?.smtp.configured ?? false
                 for (const draft of selectedDrafts) {
-                  if (draft.selected.platform === "email") {
+                  if (draft.selected.platform === "email" && canSendEmail) {
                     await publishEmail(draft.selected.id)
                   }
                   if (draft.selected.platform === "linkedin") {
@@ -447,7 +453,7 @@ export default function EventDetailPage() {
                         try {
                           setWorkingPlatform(platform)
                           await approveContent(selected.id, defaultActor)
-                          if (selected.platform === "email") {
+                          if (selected.platform === "email" && (integrations?.smtp.configured ?? false)) {
                             await publishEmail(selected.id)
                           }
                           if (selected.platform === "linkedin") {

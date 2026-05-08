@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useTheme } from "next-themes"
 import { Moon, Sun, Search, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -31,10 +32,12 @@ export function TopNavbar() {
         </div>
       </div>
       <div className="flex items-center gap-2 px-4">
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-4 w-4" />
-          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
-          <span className="sr-only">Notifications</span>
+        <Button variant="ghost" size="icon" className="relative" asChild>
+          <Link href="/dashboard/notifications" aria-label="Notifications">
+            <Bell className="h-4 w-4" />
+            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-primary" />
+            <span className="sr-only">Notifications</span>
+          </Link>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

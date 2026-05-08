@@ -1,8 +1,0 @@
-
-.gitignore
-backend/aevum_ai.db
-backend/run_test.bat
-backend/scripts/test_linkedin_post.py
-backend/test_campaign_generation.py
-backend/tmp_test_agent.py
-
