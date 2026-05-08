@@ -30,7 +30,19 @@ class SchedulerService:
             return
             
         try:
-            # Add job to run every N hours
+            # Add job for periodic event sync from Google Calendar (every 3 hours)
+            if self.calendar_service:
+                self.scheduler.add_job(
+                    self.sync_calendar_events,
+                    'interval',
+                    hours=3,
+                    id='sync_calendar_events',
+                    name='Sync events from Google Calendar',
+                    replace_existing=True
+                )
+                print(f"✓ Calendar sync scheduled every 3 hours")
+            
+            # Add job for auto-generate campaigns (every N hours as configured)
             self.scheduler.add_job(
                 self.auto_generate_campaigns,
                 'interval',
@@ -53,6 +65,23 @@ class SchedulerService:
         except Exception as e:
             print(f"⚠ Error stopping scheduler: {e}")
     
+    def sync_calendar_events(self):
+        """Periodic job: Sync events from Google Calendar every 3 hours"""
+        try:
+            print(f"\n{'='*70}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running calendar sync job...")
+            print(f"{'='*70}")
+            
+            if self.calendar_service:
+                self.calendar_service.fetch_and_sync_events()
+                print("✓ Calendar sync completed")
+            else:
+                print("⚠ Calendar service not available")
+            
+            print(f"{'='*70}\n")
+        except Exception as e:
+            print(f"❌ Error in calendar sync job: {e}")
+    
     def auto_generate_campaigns(self):
         """
         Autonomous job: Fetch high-urgency pre_event events and generate campaigns
@@ -63,9 +92,7 @@ class SchedulerService:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Running auto-generation job...")
             print(f"{'='*70}")
             
-            # Sync events from calendar first
-            if self.calendar_service:
-                self.calendar_service.fetch_and_sync_events()
+            # Note: Calendar is already synced by separate sync_calendar_events job
             
             # Get high-urgency pre_event events
             conn = sqlite3.connect(self.db_path)
