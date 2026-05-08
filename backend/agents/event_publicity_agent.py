@@ -136,23 +136,17 @@ class EventPublicityAgent:
 
             except Exception as e:
                 print(f"❌ Agent error: {e}")
-                if config.ALLOW_DEMO_MODE:
-                    result = self._build_fallback_response(event, lifecycle_stage)
-                else:
-                    raise RuntimeError(
-                        "Gemini generation failed. Verify GEMINI_API_KEY and model access for full system mode."
-                    )
-        else:
-            if config.ALLOW_DEMO_MODE:
                 result = self._build_fallback_response(event, lifecycle_stage)
-            else:
-                if self.model_init_error:
-                    raise RuntimeError(
-                        f"Gemini model initialization failed: {self.model_init_error}"
-                    )
-                raise RuntimeError(
-                    "Gemini API is not configured. Set GEMINI_API_KEY to run in full system mode."
-                )
+                result["generation_mode"] = "fallback"
+                result["generation_error"] = str(e)
+        else:
+            result = self._build_fallback_response(event, lifecycle_stage)
+            result["generation_mode"] = "fallback"
+            result["generation_error"] = (
+                str(self.model_init_error)
+                if self.model_init_error
+                else "Gemini API is not configured"
+            )
 
         # Post-process result to add email templates for any email platform variations
         for v in result.get('variations', []):
