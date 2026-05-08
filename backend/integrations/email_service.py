@@ -24,10 +24,16 @@ class EmailService:
         # Match names used in backend/config.py
         self.smtp_host = config.SMTP_SERVER
         self.smtp_port = config.SMTP_PORT
-        self.smtp_user = config.SMTP_USERNAME
-        self.smtp_pass = config.SMTP_PASSWORD
+        # Trim whitespace from credentials and provide sensible fallbacks
+        self.smtp_user = (config.SMTP_USERNAME or "").strip()
+        self.smtp_pass = (config.SMTP_PASSWORD or "").strip()
+        # Fallback to DEFAULT_ACCOUNT_EMAIL if SMTP_USERNAME not set
+        if not self.smtp_user:
+            self.smtp_user = (getattr(config, 'DEFAULT_ACCOUNT_EMAIL', '') or '').strip()
+
         # If port 465, prefer SSL; otherwise use STARTTLS
         self.use_tls = True if self.smtp_port != 465 else False
+
         # Use EMAIL_FROM_NAME + username if available
         default_from = self.smtp_user or config.TEAM_EMAIL or ''
         self.from_address = f"{config.EMAIL_FROM_NAME} <{default_from}>" if default_from else config.EMAIL_FROM_NAME
