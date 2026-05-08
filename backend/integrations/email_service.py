@@ -31,12 +31,14 @@ class EmailService:
         if not self.smtp_user:
             self.smtp_user = (getattr(config, 'DEFAULT_ACCOUNT_EMAIL', '') or '').strip()
 
+        # Keep the raw email for SMTP envelope sending and a formatted header for recipients.
+        self.from_email = self.smtp_user or config.TEAM_EMAIL or ''
+
         # If port 465, prefer SSL; otherwise use STARTTLS
         self.use_tls = True if self.smtp_port != 465 else False
 
         # Use EMAIL_FROM_NAME + username if available
-        default_from = self.smtp_user or config.TEAM_EMAIL or ''
-        self.from_address = f"{config.EMAIL_FROM_NAME} <{default_from}>" if default_from else config.EMAIL_FROM_NAME
+        self.from_address = f"{config.EMAIL_FROM_NAME} <{self.from_email}>" if self.from_email else config.EMAIL_FROM_NAME
 
     def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
         """Send an email via SMTP. Returns True on success, False otherwise."""
@@ -60,7 +62,7 @@ class EmailService:
             if self.smtp_user and self.smtp_pass:
                 server.login(self.smtp_user, self.smtp_pass)
 
-            server.sendmail(self.from_address, [to_address], msg.as_string())
+            server.sendmail(self.from_email or self.from_address, [to_address], msg.as_string())
             server.quit()
             print(f"✓ Email sent to {to_address}")
             return True
