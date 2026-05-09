@@ -181,7 +181,7 @@ export default function EventDetailPage() {
         if (existingSummary) {
           detail = await getCampaignDetail(existingSummary.id)
         } else {
-          const generated = await generateCampaign(eventId)
+          const generated = await generateCampaign(eventId, "medium")
           detail = await getCampaignDetail(generated.campaign_id)
         }
 
@@ -431,7 +431,7 @@ export default function EventDetailPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 items-stretch">
             {selectedDrafts.map(({ platform, selected, drafts }) => {
               const maxVariation = drafts.length
               const currentVariation = selectedVariationByPlatform[platform] || selected.variation_num
@@ -493,7 +493,7 @@ export default function EventDetailPage() {
                       </div>
                     ) : (
                       <ScrollArea className="max-h-[320px] pr-3">
-                        <pre className="whitespace-pre-wrap text-sm leading-6 text-foreground">{selected.content_text}</pre>
+                        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selected.content_text}</pre>
                       </ScrollArea>
                     )}
                   </div>
