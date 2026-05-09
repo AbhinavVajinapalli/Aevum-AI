@@ -105,16 +105,22 @@ export function PlatformContentCard({
               )}
               {variation.isSelected && (
                 <div className="mt-3 flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onApprove(variation.id)
-                    }}
-                  >
-                    <Check className="mr-1 h-4 w-4" />
-                    Approve
-                  </Button>
+                  {platform === "linkedin" ? (
+                    <Button size="sm" disabled>
+                      Coming soon
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onApprove(variation.id)
+                      }}
+                    >
+                      <Check className="mr-1 h-4 w-4" />
+                      Approve
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

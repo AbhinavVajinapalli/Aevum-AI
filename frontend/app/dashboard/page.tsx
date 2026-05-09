@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
   getDashboardSnapshot,
+  publishWhatsApp,
+  publishEmail,
   type DashboardSnapshot,
   type BackendEvent,
   type BackendCampaignSummary,
@@ -91,6 +93,28 @@ function CampaignRow({ campaign }: { campaign: BackendCampaignSummary }) {
   )
 }
 
+function renderContentText(raw: any) {
+  if (!raw && raw !== 0) return ""
+  if (typeof raw === "string") return raw
+  if (Array.isArray(raw)) {
+    try {
+      // If array of objects with 'content' field, join them
+      if (raw.length > 0 && typeof raw[0] === "object" && raw[0] !== null && 'content' in raw[0]) {
+        return raw.map((r: any) => r.content).join('\n\n')
+      }
+      return raw.map((r: any) => (typeof r === 'string' ? r : JSON.stringify(r))).join('\n\n')
+    } catch {
+      return JSON.stringify(raw)
+    }
+  }
+  if (typeof raw === 'object') {
+    // Try common fields
+    if (raw.content) return String(raw.content)
+    return JSON.stringify(raw)
+  }
+  return String(raw)
+}
+
 function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][number] }) {
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
@@ -102,7 +126,52 @@ function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][num
             </Badge>
             <span className="text-sm text-muted-foreground">{item.event_title || "Untitled event"}</span>
           </div>
-          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{item.content_text}</p>
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{renderContentText((item as any).content_text)}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {item.platform === "whatsapp" && (item as any).approval_status === "approved" && (
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  const raw = window.prompt("Enter recipient phone number (E.164, e.g. +15551234567)")
+                  if (!raw) return
+                  // Normalise: if user entered without +, assume +91 (India) — keep this behaviour minimal
+                  const recipient = raw.startsWith("+") ? raw : "+91" + raw
+                  const res = await publishWhatsApp(item.id, recipient)
+                  window.alert(res?.message || "WhatsApp send requested")
+                } catch (err: any) {
+                  window.alert(err?.message || String(err))
+                }
+              }}
+            >
+              Send
+            </Button>
+          )}
+
+          {item.platform === "email" && (item as any).approval_status === "approved" && (
+            <Button
+              size="sm"
+              onClick={async () => {
+                try {
+                  const defaultEmail = (process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "").trim()
+                  const recipient = window.prompt("Enter recipient email (leave empty to use default)", defaultEmail)
+                  if (recipient === null) return
+                  const to = (recipient && recipient.trim()) || defaultEmail
+                  if (!to) {
+                    window.alert("No recipient provided")
+                    return
+                  }
+                  const res = await publishEmail(item.id, to, true)
+                  window.alert(res?.message || "Email send requested")
+                } catch (err: any) {
+                  window.alert(err?.message || String(err))
+                }
+              }}
+            >
+              Send
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -164,20 +164,62 @@ async def get_event_detail(event_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/content/{content_id}/publish/whatsapp", tags=["Publish"])
-async def publish_whatsapp(content_id: int, recipient: str, message: Optional[str] = None):
-    """Publish content via WhatsApp using Twilio Sandbox/SDK.
+@app.post("/api/content/{content_id}/publish/whatsapp", tags=["Publishing"])
+async def publish_whatsapp(content_id: str, recipient: Optional[str] = Query(None), message: Optional[str] = Query(None)):
+    """Publish approved content via WhatsApp using Twilio.
 
-    `recipient` should be an E.164 phone number (e.g. +15558675310) — the code
-    will add the `whatsapp:` prefix automatically.
+    If `recipient` is provided it should be an E.164 phone number (e.g. +15558675310).
+    If `message` is provided it will override the stored content_text. This handler
+    ensures non-string Query defaults don't get sent as message bodies.
     """
-    # TODO: reuse your existing approval check for content_id here
-    text = message or "Update from Aevum AI"
     try:
-        resp = whatsapp_service.send_message(recipient, text)
-        return {"status": "ok", "twilio": resp}
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+        content_row = cursor.fetchone()
+
+        if not content_row:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        content = dict(content_row)
+
+        if content.get('approval_status') != 'approved':
+            raise HTTPException(status_code=400, detail="Content must be approved before sending")
+
+        # Defensive: only accept message if it's a non-empty string (avoid FastAPI Query sentinel objects)
+        if isinstance(message, str) and message.strip():
+            text = message.strip()
+        else:
+            text = content.get('content_text') or 'Update from Aevum AI'
+
+        # Defensive: validate recipient is a plain string (not a Query object)
+        if not (isinstance(recipient, str) and recipient.strip()):
+            raise HTTPException(status_code=400, detail="No WhatsApp recipient provided. Pass ?recipient=+1555... in the request.")
+
+        # Send message via Twilio service
+        result = whatsapp_service.send_message(recipient.strip(), text)
+
+        analytics_id = f"anal_{uuid.uuid4().hex[:8]}"
+        cursor.execute("""
+            INSERT INTO analytics (id, platform, content_id, status, sent_at, response_status)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        """, (analytics_id, 'whatsapp', content_id, 'sent', 200))
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "success",
+            "content_id": content_id,
+            "recipient": recipient.strip(),
+            "twilio": result,
+            "message": "WhatsApp message sent successfully"
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"WhatsApp send failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/content/{content_id}/publish/telegram", tags=["Publishing"])
