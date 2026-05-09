@@ -2,10 +2,37 @@
 
 AI-powered event publicity platform with a Next.js frontend and FastAPI backend.
 
+## What It Does
+
+Aevum AI helps teams promote events by generating channel-specific content, routing it through approvals, and publishing approved content through integrated delivery channels.
+
+### Current Product Features
+
+- Google Calendar sync for event ingestion.
+- AI-assisted campaign and variation generation.
+- Multi-platform content workflow (email, WhatsApp, LinkedIn drafts).
+- Approval lifecycle support (`pending`, `approved`, and sent tracking).
+- Dashboard cards for analytics, campaigns, and approval queues.
+- Send actions from dashboard for approved Email and WhatsApp content.
+- LinkedIn generation visible in workflow with UI-level `Coming soon` publishing state.
+- Integration health visibility in dashboard (SMTP, Gemini, Calendar, LinkedIn).
+
 ## Repository Structure
 
 - `frontend/` - Next.js app (UI, dashboard, pages, components)
 - `backend/` - FastAPI API, integrations, services, agents
+
+## Core Backend Endpoints
+
+- `GET /api/events` - list synced events.
+- `POST /api/campaigns/generate` - generate campaign content for an event.
+- `GET /api/campaigns` - campaign summary and status breakdown.
+- `GET /api/approvals/pending` - pending approval items.
+- `GET /api/approvals/approved` - approved, unsent content ready to publish.
+- `POST /api/content/{content_id}/publish/email` - send approved email content.
+- `POST /api/content/{content_id}/publish/whatsapp` - send approved WhatsApp content.
+- `GET /api/analytics` - dashboard analytics snapshot.
+- `GET /api/integrations/status` - integration configuration/health status.
 
 ## Local Development
 
@@ -110,11 +137,11 @@ Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini,
 	- Click "Deploy"
 
 5. **Update Frontend API Base URL**
-	- Edit `frontend/lib/api.ts`:
+	- Ensure frontend API base URL is set via environment variable:
 	  ```typescript
-	  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
+	  NEXT_PUBLIC_API_BASE_URL=https://YOUR_RENDER_URL
 	  ```
-	- Ensure frontend makes API calls to Render backend URL
+	- Frontend API helpers resolve this and call backend endpoints through `frontend/lib/backend.ts`.
 	- Commit and push; Vercel auto-deploys
 
 6. **Test Frontend**
@@ -128,7 +155,8 @@ Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini,
 - [ ] OAuth flow works (LinkedIn/Google login)
 - [ ] Dashboard displays after login
 - [ ] Campaign/event creation works
-- [ ] LinkedIn posting functional (verify org URN is set)
+- [ ] Email and WhatsApp send buttons work for approved items
+- [ ] LinkedIn content generation appears in dashboard/cards (publishing remains coming soon)
 - [ ] Database persists data (check Render logs)
 - [ ] Error logs accessible (Render Logs tab, Vercel error logs)
 
