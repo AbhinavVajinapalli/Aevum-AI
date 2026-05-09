@@ -107,6 +107,10 @@ export type DashboardSnapshot = {
   integrations: IntegrationStatus
 }
 
+export type DashboardSnapshotExtended = DashboardSnapshot & {
+  approvedContent: BackendContentItem[]
+}
+
 export async function getEvents(limit = 10): Promise<BackendEvent[]> {
   return requestApi<BackendEvent[]>(`/events?limit=${limit}`)
 }
@@ -136,6 +140,13 @@ export async function getCampaignDetail(campaignId: string): Promise<BackendCamp
 export async function getPendingApprovals(limit = 20): Promise<BackendContentItem[]> {
   const response = await requestApi<{ total_pending: number; items: BackendContentItem[] }>(
     `/approvals/pending?limit=${limit}`
+  )
+  return response.items
+}
+
+export async function getApprovedContent(limit = 20): Promise<BackendContentItem[]> {
+  const response = await requestApi<{ total_approved: number; items: BackendContentItem[] }>(
+    `/approvals/approved?limit=${limit}`
   )
   return response.items
 }

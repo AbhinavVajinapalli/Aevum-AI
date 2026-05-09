@@ -17,6 +17,7 @@ import {
   type BackendEvent,
   type BackendCampaignSummary,
 } from "@/lib/backend"
+import { getApprovedContent, type BackendContentItem } from "@/lib/backend"
 
 type UiActivity = {
   id: string
@@ -183,12 +184,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [approvedContent, setApprovedContent] = useState<BackendContentItem[]>([])
 
   const loadSnapshot = async () => {
     try {
       setError(null)
       const data = await getDashboardSnapshot()
       setSnapshot(data)
+      // Also fetch approved content for Send buttons
+      const approved = await getApprovedContent(8)
+      setApprovedContent(approved)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard")
     } finally {
@@ -196,6 +201,7 @@ export default function DashboardPage() {
       setRefreshing(false)
     }
   }
+
 
   useEffect(() => {
     loadSnapshot()
@@ -300,14 +306,14 @@ export default function DashboardPage() {
             <CardTitle>Pending Approvals</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {snapshot?.pendingApprovals.length ? (
-              snapshot.pendingApprovals.slice(0, 5).map((item) => (
+            {approvedContent.length ? (
+              approvedContent.slice(0, 5).map((item) => (
                 <ApprovalRow key={item.id} item={item} />
               ))
             ) : loading ? (
               <div className="text-sm text-muted-foreground">Loading approvals...</div>
             ) : (
-              <div className="text-sm text-muted-foreground">No pending approvals.</div>
+              <div className="text-sm text-muted-foreground">No approved content ready to send.</div>
             )}
           </CardContent>
         </Card>

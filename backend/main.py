@@ -557,6 +557,35 @@ async def get_pending_approvals(limit: int = Query(20, ge=1, le=100)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/approvals/approved", tags=["Approvals"])
+async def get_approved_content(limit: int = Query(20, ge=1, le=100)):
+    """Get all approved content ready to send (approved but not yet sent)"""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT gc.*, c.event_id, e.title as event_title
+            FROM generated_content gc
+            LEFT JOIN campaigns c ON gc.campaign_id = c.id
+            LEFT JOIN events e ON c.event_id = e.id
+            WHERE gc.approval_status = 'approved' AND gc.status != 'sent'
+            ORDER BY gc.created_at DESC
+            LIMIT ?
+        """, (limit,))
+        
+        items = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        return {
+            "total_approved": len(items),
+            "items": items
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/approvals/bulk-approve", tags=["Approvals"])
 async def bulk_approve_content(
     content_ids: List[str],
