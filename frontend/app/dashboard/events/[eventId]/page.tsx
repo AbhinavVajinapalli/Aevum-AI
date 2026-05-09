@@ -143,6 +143,7 @@ export default function EventDetailPage() {
   const [workingPlatform, setWorkingPlatform] = useState<string | null>(null)
   const [selectedVariationByPlatform, setSelectedVariationByPlatform] = useState<Record<string, number>>({})
   const [approvedDraftIds, setApprovedDraftIds] = useState<Record<string, boolean>>({})
+  const [eventPublished, setEventPublished] = useState(false)
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editedText, setEditedText] = useState<string>("")  
@@ -182,6 +183,7 @@ export default function EventDetailPage() {
           initialSelection[platform] = grouped[platform][0]?.variation_num || 1
         }
         setSelectedVariationByPlatform(initialSelection)
+        setEventPublished(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load event")
       } finally {
@@ -270,16 +272,23 @@ export default function EventDetailPage() {
                 setWorkingPlatform("event")
                 const ids = selectedDrafts.map((item) => item.selected.id)
                 if (!ids.length) return
-                await bulkApproveContent(ids, defaultActor)
+                const pendingIds = selectedDrafts
+                  .filter((item) => item.selected.approval_status !== "approved")
+                  .map((item) => item.selected.id)
+
+                if (pendingIds.length) {
+                  await bulkApproveContent(pendingIds, defaultActor)
+                }
+
                 for (const draft of selectedDrafts) {
                   if (draft.selected.platform === "email") {
-                    await publishEmail(draft.selected.id)
+                    await publishEmail(draft.selected.id, DEFAULT_EMAIL_RECIPIENT, true)
                   }
                   if (draft.selected.platform === "linkedin") {
                     await publishLinkedIn(draft.selected.id)
                   }
                   if (draft.selected.platform === "whatsapp") {
-                    await publishWhatsApp(draft.selected.id)
+                    await publishWhatsApp(draft.selected.id, resolveWhatsAppRecipient())
                   }
                   if (draft.selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
                     await publishTelegram(draft.selected.id)
@@ -292,16 +301,17 @@ export default function EventDetailPage() {
                   for (const id of ids) next[id] = true
                   return next
                 })
+                setEventPublished(true)
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Failed to approve event")
               } finally {
                 setWorkingPlatform(null)
               }
             }}
-            disabled={workingPlatform === "event"}
+            disabled={workingPlatform === "event" || eventPublished}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            Publish drafts
+            {eventPublished ? "Published" : "Publish drafts"}
           </Button>
         </div>
       </div>
@@ -498,6 +508,7 @@ export default function EventDetailPage() {
                             }
                             setSelectedVariationByPlatform(nextSelection)
                             setApprovedDraftIds({})
+                            setEventPublished(false)
                           }
                         } catch (err) {
                           setError(err instanceof Error ? err.message : "Failed to generate new version")

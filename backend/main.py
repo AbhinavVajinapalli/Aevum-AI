@@ -286,7 +286,7 @@ async def sync_events():
 async def generate_campaign(event_id: str):
     """
     Generate content for an event using EventPublicityAgent
-    Returns multiple variations per platform
+    Returns one initial variation per platform
     """
     try:
         # Get event
@@ -322,35 +322,48 @@ async def generate_campaign(event_id: str):
             json.dumps(agent_response)
         ))
         
-        # Store generated content variations
+        # Store one generated content variation per platform by default.
+        # Additional versions are created only when users request them from UI.
         content_ids = []
         for platform_content in agent_response.get('variations', []):
             platform = platform_content.get('platform', 'email')
-            
-            for var_num in [1, 2, 3]:
-                content_text = platform_content.get(f'variation_{var_num}', '')
-                hashtags = ','.join(platform_content.get('hashtags', []))
-                scheduled_time = platform_content.get('scheduled_time', '09:00')
-                
-                content_id = f"cont_{uuid.uuid4().hex[:8]}"
-                cursor.execute("""
-                    INSERT INTO generated_content 
-                    (id, campaign_id, platform, content_text, variation_num, tone, hashtags, scheduled_time, status, approval_status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    content_id,
-                    campaign_id,
-                    platform,
-                    content_text,
-                    var_num,
-                    agent_response.get('tone', 'professional'),
-                    hashtags,
-                    scheduled_time,
-                    'draft',
-                    'pending'
-                ))
-                
-                content_ids.append(content_id)
+
+            var_num = 1
+            content_text = platform_content.get('variation_1', '')
+
+            # Ensure email draft stores both subject and body, not just subject.
+            if platform == 'email':
+                templates = platform_content.get('email_templates', {})
+                template = templates.get('variation_1', {}) if isinstance(templates, dict) else {}
+                subject = (template.get('subject') or '').strip() if isinstance(template, dict) else ''
+                plain_body = (template.get('plain') or '').strip() if isinstance(template, dict) else ''
+
+                if subject or plain_body:
+                    subject_line = f"Subject: {subject}" if subject else str(content_text).strip()
+                    content_text = f"{subject_line}\n\n{plain_body}".strip()
+
+            hashtags = ','.join(platform_content.get('hashtags', []))
+            scheduled_time = platform_content.get('scheduled_time', '09:00')
+
+            content_id = f"cont_{uuid.uuid4().hex[:8]}"
+            cursor.execute("""
+                INSERT INTO generated_content 
+                (id, campaign_id, platform, content_text, variation_num, tone, hashtags, scheduled_time, status, approval_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                content_id,
+                campaign_id,
+                platform,
+                content_text,
+                var_num,
+                agent_response.get('tone', 'professional'),
+                hashtags,
+                scheduled_time,
+                'draft',
+                'pending'
+            ))
+
+            content_ids.append(content_id)
         
         conn.commit()
         conn.close()
