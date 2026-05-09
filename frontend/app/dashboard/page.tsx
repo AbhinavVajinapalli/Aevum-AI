@@ -11,13 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import {
   getDashboardSnapshot,
-  publishWhatsApp,
-  publishEmail,
   type DashboardSnapshot,
   type BackendEvent,
   type BackendCampaignSummary,
 } from "@/lib/backend"
-import { getApprovedContent, type BackendContentItem } from "@/lib/backend"
 
 type UiActivity = {
   id: string
@@ -94,114 +91,17 @@ function CampaignRow({ campaign }: { campaign: BackendCampaignSummary }) {
   )
 }
 
-function renderContentText(raw: any) {
-  if (!raw && raw !== 0) return ""
-  if (typeof raw === "string") return raw
-  if (Array.isArray(raw)) {
-    try {
-      // If array of objects with 'content' field, join them
-      if (raw.length > 0 && typeof raw[0] === "object" && raw[0] !== null && 'content' in raw[0]) {
-        return raw.map((r: any) => r.content).join('\n\n')
-      }
-      return raw.map((r: any) => (typeof r === 'string' ? r : JSON.stringify(r))).join('\n\n')
-    } catch {
-      return JSON.stringify(raw)
-    }
-  }
-  if (typeof raw === 'object') {
-    // Try common fields
-    if (raw.content) return String(raw.content)
-    return JSON.stringify(raw)
-  }
-  return String(raw)
-}
-
-function ApprovalRow({ item }: { item: BackendContentItem }) {
-  return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="uppercase tracking-wide">
-              {item.platform}
-            </Badge>
-            <span className="text-sm text-muted-foreground">{item.event_title || "Untitled event"}</span>
-          </div>
-          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{renderContentText(item.content_text)}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {item.platform === "whatsapp" && item.approval_status === "approved" && (
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  const raw = window.prompt("Enter WhatsApp recipient phone number (with country code, e.g. 9490476031 or +919490476031)")
-                  if (!raw) return
-                  // Normalize: if user entered without +, assume +91 (India)
-                  const recipient = raw.startsWith("+") ? raw : "+91" + raw
-                  console.log("Sending WhatsApp to:", recipient)
-                  const res = await publishWhatsApp(item.id, recipient)
-                  window.alert(res?.message || "WhatsApp send requested")
-                } catch (err: any) {
-                  window.alert("Error: " + (err?.message || String(err)))
-                }
-              }}
-            >
-              Send
-            </Button>
-          )}
-
-          {item.platform === "email" && item.approval_status === "approved" && (
-            <Button
-              size="sm"
-              onClick={async () => {
-                try {
-                  const defaultEmail = (process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "").trim()
-                  const recipient = window.prompt("Enter recipient email (leave empty to use default)", defaultEmail)
-                  if (recipient === null) return
-                  const to = (recipient && recipient.trim()) || defaultEmail
-                  if (!to) {
-                    window.alert("No recipient provided")
-                    return
-                  }
-                  console.log("Sending email to:", to)
-                  const res = await publishEmail(item.id, to, true)
-                  window.alert(res?.message || "Email send requested")
-                } catch (err: any) {
-                  window.alert("Error: " + (err?.message || String(err)))
-                }
-              }}
-            >
-              Send
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function DashboardPage() {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [approvedContent, setApprovedContent] = useState<BackendContentItem[]>([])
 
   const loadSnapshot = async () => {
     try {
       setError(null)
       const data = await getDashboardSnapshot()
       setSnapshot(data)
-      // Also fetch approved content for Send buttons
-      try {
-        const approved = await getApprovedContent(8)
-        console.log("Loaded approved content:", approved)
-        setApprovedContent(approved)
-      } catch (approvalErr) {
-        console.error("Failed to load approved content:", approvalErr)
-        setApprovedContent([])
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard")
     } finally {
@@ -311,18 +211,15 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Pending Approvals</CardTitle>
+            <CardTitle>Send from events</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {approvedContent.length ? (
-              approvedContent.slice(0, 5).map((item) => (
-                <ApprovalRow key={item.id} item={item} />
-              ))
-            ) : loading ? (
-              <div className="text-sm text-muted-foreground">Loading approvals...</div>
-            ) : (
-              <div className="text-sm text-muted-foreground">No approved content ready to send.</div>
-            )}
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+              Approved content is sent from each event's detail page. Open an event to review drafts and publish email or WhatsApp using your saved defaults.
+            </div>
+            <Button asChild>
+              <a href="/dashboard/events">Open events</a>
+            </Button>
           </CardContent>
         </Card>
       </div>

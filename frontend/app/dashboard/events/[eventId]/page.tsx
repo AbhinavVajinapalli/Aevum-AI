@@ -35,6 +35,14 @@ import {
   type BackendEvent,
 } from "@/lib/backend"
 
+const DEFAULT_EMAIL_RECIPIENT = (
+  process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "2303a52486@sru.edu.in"
+).trim()
+
+const DEFAULT_WHATSAPP_NUMBER = (
+  process.env.NEXT_PUBLIC_DEFAULT_WHATSAPP_NUMBER || "9490476031"
+).trim()
+
 type DraftGroup = {
   platform: string
   drafts: BackendContentItem[]
@@ -202,6 +210,11 @@ export default function EventDetailPage() {
 
   const defaultActor = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "2303a52486@sru.edu.in"
 
+  const resolveWhatsAppRecipient = () => {
+    const normalized = DEFAULT_WHATSAPP_NUMBER.replace(/\s+/g, "")
+    return normalized.startsWith("+") ? normalized : `+91${normalized}`
+  }
+
   if (loading) {
     return (
       <div className="rounded-2xl border bg-card p-8 text-sm text-muted-foreground">
@@ -258,7 +271,6 @@ export default function EventDetailPage() {
                 const ids = selectedDrafts.map((item) => item.selected.id)
                 if (!ids.length) return
                 await bulkApproveContent(ids, defaultActor)
-                const canSendEmail = integrations?.smtp.configured ?? false
                 for (const draft of selectedDrafts) {
                   if (draft.selected.platform === "email") {
                     await publishEmail(draft.selected.id)
@@ -289,7 +301,7 @@ export default function EventDetailPage() {
             disabled={workingPlatform === "event"}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" />
-            Approve event
+            Publish drafts
           </Button>
         </div>
       </div>
@@ -400,7 +412,8 @@ export default function EventDetailPage() {
             {selectedDrafts.map(({ platform, selected, drafts }) => {
               const maxVariation = drafts.length
               const currentVariation = selectedVariationByPlatform[platform] || selected.variation_num
-              const approved = !!approvedDraftIds[selected.id] || selected.approval_status === "approved"
+              const isSent = !!approvedDraftIds[selected.id]
+              const isApproved = selected.approval_status === "approved"
 
               return (
                 <div key={platform} className="rounded-2xl border bg-background/70 p-4 shadow-sm">
@@ -414,7 +427,7 @@ export default function EventDetailPage() {
                         {currentVariation} / {maxVariation}
                       </Badge>
                     </div>
-                    {approved && <Badge>Approved</Badge>}
+                    {isApproved && <Badge>{isSent ? "Sent" : "Approved"}</Badge>}
                   </div>
 
                   <div className="mt-4 rounded-xl border bg-muted/20 p-4">
@@ -502,15 +515,17 @@ export default function EventDetailPage() {
                       onClick={async () => {
                         try {
                           setWorkingPlatform(platform)
-                          await approveContent(selected.id, defaultActor)
+                          if (selected.approval_status !== "approved") {
+                            await approveContent(selected.id, defaultActor)
+                          }
                           if (selected.platform === "email") {
-                            await publishEmail(selected.id)
+                            await publishEmail(selected.id, DEFAULT_EMAIL_RECIPIENT, true)
                           }
                           if (selected.platform === "linkedin") {
                             await publishLinkedIn(selected.id)
                           }
                           if (selected.platform === "whatsapp") {
-                            await publishWhatsApp(selected.id)
+                            await publishWhatsApp(selected.id, resolveWhatsAppRecipient())
                           }
                           if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
                             await publishTelegram(selected.id)
@@ -524,10 +539,10 @@ export default function EventDetailPage() {
                           setWorkingPlatform(null)
                         }
                       }}
-                      disabled={workingPlatform === platform || approved}
+                      disabled={workingPlatform === platform || isSent}
                     >
                       <CheckCircle2 className="mr-2 h-4 w-4" />
-                      {approved ? "Approved" : "Approve draft"}
+                      {isSent ? "Sent" : selected.platform === "linkedin" ? "Approve draft" : "Send"}
                     </Button>
                     <Button
                       size="sm"
@@ -536,7 +551,7 @@ export default function EventDetailPage() {
                         setEditingId(selected.id)
                         setEditedText(selected.content_text)
                       }}
-                      disabled={approved}
+                      disabled={isSent}
                     >
                       Edit
                     </Button>
