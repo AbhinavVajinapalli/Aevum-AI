@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 
 # Import app modules
@@ -108,6 +108,18 @@ async def health_check():
         "app": config.APP_NAME,
         "version": config.APP_VERSION
     }
+
+
+# Some platforms (Render, load balancers) probe `/` with HEAD/GET. Provide
+# minimal responses to avoid 404 noise in logs.
+@app.head("/")
+async def root_head():
+    return Response(status_code=200)
+
+
+@app.get("/")
+async def root_get():
+    return JSONResponse({"status": "ok", "app": config.APP_NAME, "api": "/api"})
 
 
 # ============================================================================
