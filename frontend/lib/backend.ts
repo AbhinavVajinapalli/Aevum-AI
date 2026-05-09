@@ -119,9 +119,9 @@ export async function getEventDetail(eventId: string): Promise<BackendEvent> {
   return requestApi<BackendEvent>(`/events/${encodeURIComponent(eventId)}`)
 }
 
-export async function generateCampaign(eventId: string) {
+export async function generateCampaign(eventId: string, contentLength: string = "medium") {
   return requestApi<{ status: string; campaign_id: string; content_ids: string[] }>(
-    `/campaigns/generate?event_id=${encodeURIComponent(eventId)}`,
+    `/campaigns/generate?event_id=${encodeURIComponent(eventId)}&content_length=${encodeURIComponent(contentLength)}`,
     { method: "POST" }
   )
 }

@@ -85,7 +85,8 @@ class EventPublicityAgent:
         self, 
         event: Dict[str, Any],
         lifecycle_stage: str,
-        urgency_score: int
+        urgency_score: int,
+        content_length: str = "medium"
     ) -> Dict[str, Any]:
         """
         Main decision-making method. Agent analyzes event and generates platform-specific content.
@@ -94,6 +95,7 @@ class EventPublicityAgent:
             event: Event data {title, description, start_time, end_time, event_type}
             lifecycle_stage: "pre_event", "during_event", or "post_event"
             urgency_score: 1-10 scale
+            content_length: "short", "medium", or "long"
         
         Returns:
             {
@@ -116,7 +118,7 @@ class EventPublicityAgent:
         """
         
         # Build intelligent prompt for Gemini
-        prompt = self._build_analysis_prompt(event, lifecycle_stage, urgency_score)
+        prompt = self._build_analysis_prompt(event, lifecycle_stage, urgency_score, content_length)
         
         # If LLM available, attempt to call; otherwise use fallback
         if self.model:
@@ -175,7 +177,8 @@ class EventPublicityAgent:
         self, 
         event: Dict[str, Any],
         lifecycle_stage: str,
-        urgency_score: int
+        urgency_score: int,
+        content_length: str = "medium"
     ) -> str:
         """Build the prompt for Gemini with all context"""
         
@@ -183,6 +186,12 @@ class EventPublicityAgent:
             "pre_event": "Event is upcoming. Focus on excitement, registration, and early promotion.",
             "during_event": "Event is happening now. Generate live updates, real-time engagement, urgent calls to action.",
             "post_event": "Event is finished. Focus on thank you, highlights, feedback requests, next steps."
+        }
+        
+        length_guidelines = {
+            "short": "Keep content VERY BRIEF - max 1-2 sentences for social media, max 50 words for email subject",
+            "medium": "Keep content concise - 2-4 sentences for social media, max 100 words total for email",
+            "long": "Provide detailed content - full paragraphs for social media (100-200 words), comprehensive email (200+ words)"
         }
         
         prompt = f"""
@@ -199,6 +208,7 @@ CONTEXT:
 - Lifecycle Stage: {lifecycle_stage}
 - {stage_context.get(lifecycle_stage, '')}
 - Urgency Score: {urgency_score}/10 (higher = more urgent/imminent)
+- Content Length: {content_length.upper()}. {length_guidelines.get(content_length, length_guidelines['medium'])}
 
 Your task: Analyze this event and make strategic decisions about publicity.
 

@@ -126,7 +126,8 @@ class SchedulerService:
                     agent_response = self.agent.analyze_and_generate_content(
                         event=event,
                         lifecycle_stage=event['lifecycle_stage'],
-                        urgency_score=event['urgency_score']
+                        urgency_score=event['urgency_score'],
+                        content_length="medium"
                     )
                     
                     # Create campaign record

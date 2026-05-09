@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   getEvents,
   getEventDetail,
   generateCampaign,
@@ -54,6 +61,7 @@ export default function EventsPage() {
   const [campaignsByEvent, setCampaignsByEvent] = useState<Record<string, BackendCampaignDetail | null>>({})
   const [selectedContent, setSelectedContent] = useState<Record<string, boolean>>({})
   const [previewDraft, setPreviewDraft] = useState<{ eventId: string; draft: BackendContentItem } | null>(null)
+  const [variationLength, setVariationLength] = useState<"short" | "medium" | "long">("medium")
 
   const load = async () => {
     try {
@@ -89,6 +97,22 @@ export default function EventsPage() {
 
       <div className="flex flex-col gap-3 sm:max-w-md">
         <Input placeholder="Search events..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Content Length</label>
+          <Select value={variationLength} onValueChange={(value: any) => setVariationLength(value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="short">Short</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="long">Long</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {error && (
@@ -192,6 +216,8 @@ export default function EventsPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <input
+                                        id={`content-${item.id}`}
+                                        name={`content-${item.id}`}
                                         type="checkbox"
                                         checked={isSelected}
                                         onChange={(e) => {
@@ -221,7 +247,7 @@ export default function EventsPage() {
                                         e.stopPropagation()
                                         try {
                                           setWorkingId(item.id)
-                                          const gen = await generateCampaign(event.id)
+                                          const gen = await generateCampaign(event.id, variationLength)
                                           if (gen?.campaign_id) {
                                             const camp = await getCampaignDetail(gen.campaign_id)
                                             setCampaignsByEvent((s) => ({ ...s, [event.id]: camp }))

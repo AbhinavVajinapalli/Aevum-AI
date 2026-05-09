@@ -283,12 +283,17 @@ async def sync_events():
 # ============================================================================
 
 @app.post("/api/campaigns/generate", tags=["Campaigns"])
-async def generate_campaign(event_id: str):
+async def generate_campaign(event_id: str, content_length: str = "medium"):
     """
     Generate content for an event using EventPublicityAgent
+    content_length: "short", "medium", or "long"
     Returns one initial variation per platform
     """
     try:
+        # Validate content_length
+        if content_length not in ["short", "medium", "long"]:
+            content_length = "medium"
+        
         # Get event
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -302,11 +307,12 @@ async def generate_campaign(event_id: str):
         
         event = dict(event_row)
         
-        # Call the intelligent agent
+        # Call the intelligent agent with content_length preference
         agent_response = publicity_agent.analyze_and_generate_content(
             event=event,
             lifecycle_stage=event['lifecycle_stage'],
-            urgency_score=event['urgency_score']
+            urgency_score=event['urgency_score'],
+            content_length=content_length
         )
         
         # Create campaign record
