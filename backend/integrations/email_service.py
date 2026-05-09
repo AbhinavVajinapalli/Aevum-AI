@@ -61,6 +61,9 @@ class EmailService:
 
             if self.smtp_user and self.smtp_pass:
                 server.login(self.smtp_user, self.smtp_pass)
+            elif self.smtp_pass and not self.smtp_user:
+                # Some providers only need a username-like envelope sender; use the configured from address.
+                server.login(self.from_email or self.from_address, self.smtp_pass)
 
             server.sendmail(self.from_email or self.from_address, [to_address], msg.as_string())
             server.quit()

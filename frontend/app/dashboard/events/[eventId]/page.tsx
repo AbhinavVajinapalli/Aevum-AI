@@ -16,6 +16,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   approveContent,
@@ -48,6 +55,8 @@ type DraftGroup = {
   drafts: BackendContentItem[]
   selectedIndex: number
 }
+
+type ContentLength = "short" | "medium" | "long"
 
 type LifecycleStep = {
   key: "pre_event" | "during_event" | "post_event"
@@ -142,6 +151,7 @@ export default function EventDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [workingPlatform, setWorkingPlatform] = useState<string | null>(null)
   const [selectedVariationByPlatform, setSelectedVariationByPlatform] = useState<Record<string, number>>({})
+  const [generationLengthByPlatform, setGenerationLengthByPlatform] = useState<Record<string, ContentLength>>({})
   const [approvedDraftIds, setApprovedDraftIds] = useState<Record<string, boolean>>({})
   const [eventPublished, setEventPublished] = useState(false)
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
@@ -179,10 +189,13 @@ export default function EventDetailPage() {
 
         const grouped = groupDraftsByPlatform(detail?.content || [])
         const initialSelection: Record<string, number> = {}
+        const initialLengths: Record<string, ContentLength> = {}
         for (const platform of Object.keys(grouped)) {
           initialSelection[platform] = grouped[platform][0]?.variation_num || 1
+          initialLengths[platform] = "medium"
         }
         setSelectedVariationByPlatform(initialSelection)
+        setGenerationLengthByPlatform(initialLengths)
         setEventPublished(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load event")
@@ -422,11 +435,12 @@ export default function EventDetailPage() {
             {selectedDrafts.map(({ platform, selected, drafts }) => {
               const maxVariation = drafts.length
               const currentVariation = selectedVariationByPlatform[platform] || selected.variation_num
+              const generationLength = generationLengthByPlatform[platform] || "medium"
               const isSent = !!approvedDraftIds[selected.id]
               const isApproved = selected.approval_status === "approved"
 
               return (
-                <div key={platform} className="rounded-2xl border bg-background/70 p-4 shadow-sm">
+                <div key={platform} className="flex h-full flex-col rounded-2xl border bg-background/70 p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="uppercase tracking-wide">
@@ -440,7 +454,7 @@ export default function EventDetailPage() {
                     {isApproved && <Badge>{isSent ? "Sent" : "Approved"}</Badge>}
                   </div>
 
-                  <div className="mt-4 rounded-xl border bg-muted/20 p-4">
+                  <div className="mt-4 min-h-0 flex-1 rounded-xl border bg-muted/20 p-4">
                     {editingId === selected.id ? (
                       <div className="space-y-3">
                         <textarea
@@ -484,88 +498,120 @@ export default function EventDetailPage() {
                     )}
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          setWorkingPlatform(platform)
-                          const currentIndex = selectedVariationByPlatform[platform] || 1
-                          if (currentIndex < maxVariation) {
-                            setSelectedVariationByPlatform((state) => ({
-                              ...state,
-                              [platform]: currentIndex + 1,
-                            }))
-                          } else {
-                            const freshCampaign = await generateCampaign(event.id)
-                            const freshDetail = await getCampaignDetail(freshCampaign.campaign_id)
-                            setCampaign(freshDetail)
-                            const grouped = groupDraftsByPlatform(freshDetail.content)
-                            const nextSelection: Record<string, number> = {}
-                            for (const key of Object.keys(grouped)) {
-                              nextSelection[key] = grouped[key][0]?.variation_num || 1
+                  <div className="mt-4 space-y-3">
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Generation length
+                      </div>
+                      <Select
+                        value={generationLength}
+                        onValueChange={(value) =>
+                          setGenerationLengthByPlatform((state) => ({
+                            ...state,
+                            [platform]: value as ContentLength,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder="Choose length" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="short">Short</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="long">Long</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            setWorkingPlatform(platform)
+                            const currentIndex = selectedVariationByPlatform[platform] || 1
+                            if (currentIndex < maxVariation) {
+                              setSelectedVariationByPlatform((state) => ({
+                                ...state,
+                                [platform]: currentIndex + 1,
+                              }))
+                            } else {
+                              const freshCampaign = await generateCampaign(event.id, generationLength)
+                              const freshDetail = await getCampaignDetail(freshCampaign.campaign_id)
+                              setCampaign(freshDetail)
+                              const grouped = groupDraftsByPlatform(freshDetail.content)
+                              const nextSelection: Record<string, number> = {}
+                              const nextLengths: Record<string, ContentLength> = {}
+                              for (const key of Object.keys(grouped)) {
+                                nextSelection[key] = grouped[key][0]?.variation_num || 1
+                                nextLengths[key] = generationLengthByPlatform[key] || "medium"
+                              }
+                              setSelectedVariationByPlatform(nextSelection)
+                              setGenerationLengthByPlatform((state) => ({
+                                ...nextLengths,
+                                ...state,
+                              }))
+                              setApprovedDraftIds({})
+                              setEventPublished(false)
                             }
-                            setSelectedVariationByPlatform(nextSelection)
-                            setApprovedDraftIds({})
-                            setEventPublished(false)
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Failed to generate new version")
+                          } finally {
+                            setWorkingPlatform(null)
                           }
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to generate new version")
-                        } finally {
-                          setWorkingPlatform(null)
-                        }
-                      }}
-                      disabled={workingPlatform === platform}
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      {workingPlatform === platform ? "Generating..." : "Generate new version"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          setWorkingPlatform(platform)
-                          if (selected.approval_status !== "approved") {
-                            await approveContent(selected.id, defaultActor)
+                        }}
+                        disabled={workingPlatform === platform}
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        {workingPlatform === platform ? "Generating..." : "Generate new version"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            setWorkingPlatform(platform)
+                            if (selected.approval_status !== "approved") {
+                              await approveContent(selected.id, defaultActor)
+                            }
+                            if (selected.platform === "email") {
+                              await publishEmail(selected.id, DEFAULT_EMAIL_RECIPIENT, true)
+                            }
+                            if (selected.platform === "linkedin") {
+                              await publishLinkedIn(selected.id)
+                            }
+                            if (selected.platform === "whatsapp") {
+                              await publishWhatsApp(selected.id, resolveWhatsAppRecipient())
+                            }
+                            if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
+                              await publishTelegram(selected.id)
+                            }
+                            const refreshed = await getCampaignDetail(campaign.campaign.id)
+                            setCampaign(refreshed)
+                            setApprovedDraftIds((state) => ({ ...state, [selected.id]: true }))
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Failed to approve draft")
+                          } finally {
+                            setWorkingPlatform(null)
                           }
-                          if (selected.platform === "email") {
-                            await publishEmail(selected.id, DEFAULT_EMAIL_RECIPIENT, true)
-                          }
-                          if (selected.platform === "linkedin") {
-                            await publishLinkedIn(selected.id)
-                          }
-                          if (selected.platform === "whatsapp") {
-                            await publishWhatsApp(selected.id, resolveWhatsAppRecipient())
-                          }
-                          if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
-                            await publishTelegram(selected.id)
-                          }
-                          const refreshed = await getCampaignDetail(campaign.campaign.id)
-                          setCampaign(refreshed)
-                          setApprovedDraftIds((state) => ({ ...state, [selected.id]: true }))
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to approve draft")
-                        } finally {
-                          setWorkingPlatform(null)
-                        }
-                      }}
-                      disabled={workingPlatform === platform || isSent}
-                    >
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      {isSent ? "Sent" : selected.platform === "linkedin" ? "Approve draft" : "Send"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(selected.id)
-                        setEditedText(selected.content_text)
-                      }}
-                      disabled={isSent}
-                    >
-                      Edit
-                    </Button>
+                        }}
+                        disabled={workingPlatform === platform || isSent}
+                      >
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        {isSent ? "Sent" : selected.platform === "linkedin" ? "Approve draft" : "Send"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingId(selected.id)
+                          setEditedText(selected.content_text)
+                        }}
+                        disabled={isSent}
+                      >
+                        Edit
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="mt-4 rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
