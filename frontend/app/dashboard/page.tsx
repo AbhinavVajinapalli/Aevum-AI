@@ -116,7 +116,7 @@ function renderContentText(raw: any) {
   return String(raw)
 }
 
-function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][number] }) {
+function ApprovalRow({ item }: { item: BackendContentItem }) {
   return (
     <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -127,22 +127,23 @@ function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][num
             </Badge>
             <span className="text-sm text-muted-foreground">{item.event_title || "Untitled event"}</span>
           </div>
-          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{renderContentText((item as any).content_text)}</p>
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{renderContentText(item.content_text)}</p>
         </div>
         <div className="flex items-center gap-2">
-          {item.platform === "whatsapp" && (item as any).approval_status === "approved" && (
+          {item.platform === "whatsapp" && item.approval_status === "approved" && (
             <Button
               size="sm"
               onClick={async () => {
                 try {
-                  const raw = window.prompt("Enter recipient phone number (E.164, e.g. +15551234567)")
+                  const raw = window.prompt("Enter WhatsApp recipient phone number (with country code, e.g. 9490476031 or +919490476031)")
                   if (!raw) return
-                  // Normalise: if user entered without +, assume +91 (India) — keep this behaviour minimal
+                  // Normalize: if user entered without +, assume +91 (India)
                   const recipient = raw.startsWith("+") ? raw : "+91" + raw
+                  console.log("Sending WhatsApp to:", recipient)
                   const res = await publishWhatsApp(item.id, recipient)
                   window.alert(res?.message || "WhatsApp send requested")
                 } catch (err: any) {
-                  window.alert(err?.message || String(err))
+                  window.alert("Error: " + (err?.message || String(err)))
                 }
               }}
             >
@@ -150,7 +151,7 @@ function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][num
             </Button>
           )}
 
-          {item.platform === "email" && (item as any).approval_status === "approved" && (
+          {item.platform === "email" && item.approval_status === "approved" && (
             <Button
               size="sm"
               onClick={async () => {
@@ -163,10 +164,11 @@ function ApprovalRow({ item }: { item: DashboardSnapshot["pendingApprovals"][num
                     window.alert("No recipient provided")
                     return
                   }
+                  console.log("Sending email to:", to)
                   const res = await publishEmail(item.id, to, true)
                   window.alert(res?.message || "Email send requested")
                 } catch (err: any) {
-                  window.alert(err?.message || String(err))
+                  window.alert("Error: " + (err?.message || String(err)))
                 }
               }}
             >
@@ -192,8 +194,14 @@ export default function DashboardPage() {
       const data = await getDashboardSnapshot()
       setSnapshot(data)
       // Also fetch approved content for Send buttons
-      const approved = await getApprovedContent(8)
-      setApprovedContent(approved)
+      try {
+        const approved = await getApprovedContent(8)
+        console.log("Loaded approved content:", approved)
+        setApprovedContent(approved)
+      } catch (approvalErr) {
+        console.error("Failed to load approved content:", approvalErr)
+        setApprovedContent([])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard")
     } finally {
