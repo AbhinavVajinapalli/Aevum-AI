@@ -16,7 +16,11 @@ class WhatsAppService:
         self.account_sid = getattr(config, "TWILIO_ACCOUNT_SID", "") or ""
         self.auth_token = getattr(config, "TWILIO_AUTH_TOKEN", "") or ""
         self.from_whatsapp = getattr(config, "TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
-        self.client = Client(self.account_sid, self.auth_token)
+        # Initialize Twilio client only when credentials are present
+        if not self.account_sid or not self.auth_token:
+            self.client = None
+        else:
+            self.client = Client(self.account_sid, self.auth_token)
 
     def _format_whatsapp(self, number: str) -> str:
         number = number.strip()
@@ -28,9 +32,19 @@ class WhatsAppService:
         params = {"body": body, "from_": self.from_whatsapp, "to": to_addr}
         if media_urls:
             params["media_url"] = media_urls
+        if not self.client:
+            err = "Twilio credentials are not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN)"
+            print(f"[WhatsAppService] {err}")
+            return {"error": err}
 
-        msg = self.client.messages.create(**params)
-        return {"sid": msg.sid, "status": msg.status, "to": msg.to, "from": msg.from_}
+        try:
+            msg = self.client.messages.create(**params)
+            return {"sid": getattr(msg, 'sid', None), "status": getattr(msg, 'status', None), "to": getattr(msg, 'to', None), "from": getattr(msg, 'from_', None)}
+        except Exception as e:
+            import traceback
+            print(f"[WhatsAppService] Error sending WhatsApp message: {e}")
+            print(traceback.format_exc())
+            return {"error": str(e)}
 
 
 if __name__ == "__main__":

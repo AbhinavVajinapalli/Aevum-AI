@@ -63,6 +63,13 @@ Create environment files locally (do not commit secrets):
 
 Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini, SMTP, and API base URLs.
 
+New: Gmail API
+
+- `GMAIL_CLIENT_ID` – OAuth2 Client ID for Gmail API
+- `GMAIL_CLIENT_SECRET` – OAuth2 Client Secret for Gmail API
+- `GMAIL_REFRESH_TOKEN` – Long-lived refresh token to mint access tokens
+- `GMAIL_FROM_ADDRESS` – From address used when sending via Gmail API
+
 ## Production Deployment
 
 ### Backend Deployment on Render
@@ -156,6 +163,9 @@ Add required keys for integrations such as LinkedIn OAuth, Google OAuth, Gemini,
 - [ ] Dashboard displays after login
 - [ ] Campaign/event creation works
 - [ ] Email and WhatsApp send buttons work for approved items
+
+Notes about notifications UI:
+- Notification state is persisted in browser `localStorage` so clearing or marking as read now persists across page reloads/local navigation.
 - [ ] LinkedIn content generation appears in dashboard/cards (publishing remains coming soon)
 - [ ] Database persists data (check Render logs)
 - [ ] Error logs accessible (Render Logs tab, Vercel error logs)

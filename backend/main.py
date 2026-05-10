@@ -230,6 +230,11 @@ async def publish_whatsapp(content_id: str, recipient: Optional[str] = Query(Non
         # Send message via Twilio service
         result = whatsapp_service.send_message(recipient.strip(), text)
 
+        # If Twilio returned an error structure, propagate it
+        if isinstance(result, dict) and result.get('error'):
+            conn.close()
+            raise HTTPException(status_code=500, detail=f"WhatsApp send error: {result.get('error')}")
+
         analytics_id = f"anal_{uuid.uuid4().hex[:8]}"
         cursor.execute("""
             INSERT INTO analytics (id, platform, content_id, status, sent_at, response_status)
@@ -344,26 +349,46 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
             content_length=content_length
         )
         
-        # Create campaign record
-        campaign_id = f"camp_{uuid.uuid4().hex[:8]}"
-        cursor.execute("""
-            INSERT INTO campaigns (id, event_id, stage, status, metadata)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            campaign_id,
-            event_id,
-            event['lifecycle_stage'],
-            'draft',
-            json.dumps(agent_response)
-        ))
-        
-        # Store one generated content variation per platform by default.
-        # Additional versions are created only when users request them from UI.
+        # If a draft campaign already exists for this event, append new variations
+        cursor.execute(
+            "SELECT id FROM campaigns WHERE event_id = ? AND status = 'draft' ORDER BY created_at DESC LIMIT 1",
+            (event_id,)
+        )
+        existing = cursor.fetchone()
+        if existing and existing.get('id'):
+            campaign_id = existing['id']
+            # Optionally update metadata to latest analysis (overwrite)
+            try:
+                cursor.execute("UPDATE campaigns SET metadata = ? WHERE id = ?", (json.dumps(agent_response), campaign_id))
+            except Exception:
+                pass
+        else:
+            campaign_id = f"camp_{uuid.uuid4().hex[:8]}"
+            cursor.execute("""
+                INSERT INTO campaigns (id, event_id, stage, status, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                campaign_id,
+                event_id,
+                event['lifecycle_stage'],
+                'draft',
+                json.dumps(agent_response)
+            ))
+
+        # Store generated content variations. If appending, increment variation_num.
         content_ids = []
         for platform_content in agent_response.get('variations', []):
             platform = platform_content.get('platform', 'email')
 
-            var_num = 1
+            # Determine next variation number for this campaign+platform
+            cursor.execute(
+                "SELECT MAX(variation_num) as max_var FROM generated_content WHERE campaign_id = ? AND platform = ?",
+                (campaign_id, platform)
+            )
+            mv = cursor.fetchone()
+            prev_max = mv['max_var'] if mv and mv['max_var'] is not None else 0
+            var_num = int(prev_max) + 1
+
             content_text = platform_content.get('variation_1', '')
 
             # Ensure email draft stores both subject and body, not just subject.

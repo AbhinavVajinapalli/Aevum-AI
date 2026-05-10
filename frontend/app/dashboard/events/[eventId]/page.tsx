@@ -569,7 +569,9 @@ export default function EventDetailPage() {
                               const nextSelection: Record<string, number> = {}
                               const nextLengths: Record<string, ContentLength> = {}
                               for (const key of Object.keys(grouped)) {
-                                nextSelection[key] = grouped[key][0]?.variation_num || 1
+                                const list = grouped[key] || []
+                                const last = list[list.length - 1]
+                                nextSelection[key] = last?.variation_num || 1
                                 nextLengths[key] = generationLengthByPlatform[key] || "medium"
                               }
                               setSelectedVariationByPlatform(nextSelection)

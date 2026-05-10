@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Sparkles,
   CheckCircle2,
@@ -39,7 +39,7 @@ const notificationColors = {
   event_created: "text-chart-3 bg-chart-3/10",
 }
 
-// Mock notifications
+// Mock notifications (fallback)
 const mockNotifications: Notification[] = [
   {
     id: "1",
@@ -120,8 +120,33 @@ function formatRelativeTime(timestamp: string): string {
 }
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] =
-    useState<Notification[]>(mockNotifications)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+
+  // Load persisted notifications from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("aevum_notifications")
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          setNotifications(parsed)
+          return
+        }
+      }
+    } catch (e) {
+      // ignore parse errors and fall back to mock
+    }
+    setNotifications(mockNotifications)
+  }, [])
+
+  // Persist notifications whenever they change
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("aevum_notifications", JSON.stringify(notifications))
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, [notifications])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
