@@ -4,6 +4,7 @@ Provides a simple `EmailService` class with `send_email` method.
 This uses configuration from `config.py` and supports TLS/SSL.
 """
 from typing import Optional
+import socket
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -39,16 +40,29 @@ class EmailService:
 
         # Use EMAIL_FROM_NAME + username if available
         self.from_address = f"{config.EMAIL_FROM_NAME} <{self.from_email}>" if self.from_email else config.EMAIL_FROM_NAME
-        
+
+        # Try an IPv4 literal first on hosts that expose AAAA records but no IPv6 egress.
+        self.smtp_connect_host = self._resolve_ipv4_host(self.smtp_host)
+
         # Log initialization for debugging
-        print(f"[EmailService] Initialized: host={self.smtp_host}, port={self.smtp_port}, user={self.smtp_user[:15] if self.smtp_user else 'EMPTY'}, pass_set={bool(self.smtp_pass)}, use_tls={self.use_tls}")
+        print(f"[EmailService] Initialized: host={self.smtp_host}, connect_host={self.smtp_connect_host}, port={self.smtp_port}, user={self.smtp_user[:15] if self.smtp_user else 'EMPTY'}, pass_set={bool(self.smtp_pass)}, use_tls={self.use_tls}")
+
+    def _resolve_ipv4_host(self, host: str) -> str:
+        """Return an IPv4 address for host when possible to avoid IPv6-only routing issues."""
+        try:
+            infos = socket.getaddrinfo(host, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+            if infos:
+                return infos[0][4][0]
+        except Exception as exc:
+            print(f"[SMTP Debug] IPv4 resolution failed for {host}: {exc}")
+        return host
 
     def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
         """Send an email via SMTP. Returns True on success, False otherwise."""
         try:
             # Debug: log SMTP config at send time
-            print(f"[SMTP Debug] Host: {self.smtp_host}, Port: {self.smtp_port}, User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}")
-            
+            print(f"[SMTP Debug] Host: {self.smtp_host}, Connect host: {self.smtp_connect_host}, Port: {self.smtp_port}, User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}")
+
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
             msg['From'] = self.from_address
@@ -58,14 +72,14 @@ class EmailService:
             msg.attach(part)
 
             if self.use_tls:
-                print(f"[SMTP Debug] Connecting with STARTTLS to {self.smtp_host}:{self.smtp_port}...")
-                server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10)
+                print(f"[SMTP Debug] Connecting with STARTTLS to {self.smtp_connect_host}:{self.smtp_port}...")
+                server = smtplib.SMTP(self.smtp_connect_host, self.smtp_port, timeout=10)
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
             else:
-                print(f"[SMTP Debug] Connecting with SSL to {self.smtp_host}:{self.smtp_port}...")
-                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=10)
+                print(f"[SMTP Debug] Connecting with SSL to {self.smtp_connect_host}:{self.smtp_port}...")
+                server = smtplib.SMTP_SSL(self.smtp_connect_host, self.smtp_port, timeout=10)
 
             if self.smtp_user and self.smtp_pass:
                 print(f"[SMTP Debug] Logging in as {self.smtp_user[:20]}...")
