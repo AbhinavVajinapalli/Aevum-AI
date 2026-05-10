@@ -43,6 +43,9 @@ class EmailService:
     def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
         """Send an email via SMTP. Returns True on success, False otherwise."""
         try:
+            # Debug: log SMTP config at send time
+            print(f"[SMTP Debug] Host: {self.smtp_host}, Port: {self.smtp_port}, User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}")
+            
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
             msg['From'] = self.from_address
@@ -52,25 +55,33 @@ class EmailService:
             msg.attach(part)
 
             if self.use_tls:
+                print(f"[SMTP Debug] Connecting with STARTTLS to {self.smtp_host}:{self.smtp_port}...")
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10)
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
             else:
+                print(f"[SMTP Debug] Connecting with SSL to {self.smtp_host}:{self.smtp_port}...")
                 server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=10)
 
             if self.smtp_user and self.smtp_pass:
+                print(f"[SMTP Debug] Logging in as {self.smtp_user[:20]}...")
                 server.login(self.smtp_user, self.smtp_pass)
             elif self.smtp_pass and not self.smtp_user:
-                # Some providers only need a username-like envelope sender; use the configured from address.
+                print(f"[SMTP Debug] Logging in with from_email and password...")
                 server.login(self.from_email or self.from_address, self.smtp_pass)
+            else:
+                print(f"[SMTP Debug] WARNING: No credentials provided (user: {bool(self.smtp_user)}, pass: {bool(self.smtp_pass)})")
 
+            print(f"[SMTP Debug] Sending email to {to_address}...")
             server.sendmail(self.from_email or self.from_address, [to_address], msg.as_string())
             server.quit()
             print(f"✓ Email sent to {to_address}")
             return True
         except Exception as e:
+            import traceback
             print(f"⚠ Error sending email to {to_address}: {e}")
+            print(f"[SMTP Debug] Traceback: {traceback.format_exc()}")
             return False
 
 
