@@ -79,6 +79,11 @@ async def startup_event():
     """Initialize database and services on startup"""
     init_db()
     print(f"✓ {config.APP_NAME} started")
+    # Log SMTP config at startup for debugging
+    print(f"[SMTP Config] Host: {config.SMTP_SERVER}, Port: {config.SMTP_PORT}")
+    print(f"[SMTP Config] Username: {config.SMTP_USERNAME[:20] if config.SMTP_USERNAME else '(EMPTY)'}")
+    print(f"[SMTP Config] Password set: {bool(config.SMTP_PASSWORD)}")
+    print(f"[SMTP Config] DEFAULT_ACCOUNT_EMAIL: {config.DEFAULT_ACCOUNT_EMAIL}")
     print(f"✓ Syncing events from Google Calendar...")
     try:
         calendar_service.fetch_and_sync_events()

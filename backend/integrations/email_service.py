@@ -39,6 +39,9 @@ class EmailService:
 
         # Use EMAIL_FROM_NAME + username if available
         self.from_address = f"{config.EMAIL_FROM_NAME} <{self.from_email}>" if self.from_email else config.EMAIL_FROM_NAME
+        
+        # Log initialization for debugging
+        print(f"[EmailService] Initialized: host={self.smtp_host}, port={self.smtp_port}, user={self.smtp_user[:15] if self.smtp_user else 'EMPTY'}, pass_set={bool(self.smtp_pass)}, use_tls={self.use_tls}")
 
     def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
         """Send an email via SMTP. Returns True on success, False otherwise."""
