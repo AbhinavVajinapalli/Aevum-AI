@@ -324,6 +324,7 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
     Returns one initial variation per platform
     """
     try:
+        import traceback
         # Validate content_length
         if content_length not in ["short", "medium", "long"]:
             content_length = "medium"
@@ -341,13 +342,24 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
         
         event = dict(event_row)
         
-        # Call the intelligent agent with content_length preference
-        agent_response = publicity_agent.analyze_and_generate_content(
-            event=event,
-            lifecycle_stage=event['lifecycle_stage'],
-            urgency_score=event['urgency_score'],
-            content_length=content_length
-        )
+        # Call the intelligent agent with content_length preference, but always keep a local fallback.
+        try:
+            agent_response = publicity_agent.analyze_and_generate_content(
+                event=event,
+                lifecycle_stage=event['lifecycle_stage'],
+                urgency_score=event['urgency_score'],
+                content_length=content_length
+            )
+        except Exception as agent_error:
+            print(f"⚠ Agent generation failed, using fallback content: {agent_error}")
+            print(traceback.format_exc())
+            agent_response = publicity_agent._build_fallback_response(event, event['lifecycle_stage'])
+
+        if not isinstance(agent_response, dict):
+            try:
+                agent_response = dict(agent_response)
+            except Exception:
+                agent_response = publicity_agent._build_fallback_response(event, event['lifecycle_stage'])
         
         # If a draft campaign already exists for this event, append new variations
         cursor.execute(
@@ -355,7 +367,7 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
             (event_id,)
         )
         existing = cursor.fetchone()
-        if existing and existing.get('id'):
+        if existing:
             campaign_id = existing['id']
             # Optionally update metadata to latest analysis (overwrite)
             try:
@@ -441,6 +453,11 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
         raise
     except Exception as e:
         print(f"❌ Error generating campaign: {e}")
+        try:
+            import traceback
+            print(traceback.format_exc())
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -81,7 +81,7 @@ class Config:
     @staticmethod
     def _parse_cors_origins(value: str | None) -> list[str]:
         if not value:
-            return ["http://localhost:3000"]
+            return ["http://localhost:3000", "http://127.0.0.1:3000"]
 
         raw = value.strip()
         # Support JSON arrays: ["http://localhost:3000", "http://localhost:5173"]
@@ -94,7 +94,12 @@ class Config:
                 pass
 
         # Fallback: comma-separated list
-        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+        if "http://localhost:3000" not in origins:
+            origins.append("http://localhost:3000")
+        if "http://127.0.0.1:3000" not in origins:
+            origins.append("http://127.0.0.1:3000")
+        return origins
 
     CORS_ORIGINS = _parse_cors_origins(os.getenv("CORS_ORIGINS"))
     

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -144,7 +144,10 @@ function groupDraftsByPlatform(content: BackendContentItem[]) {
 
 export default function EventDetailPage() {
   const params = useParams<{ eventId?: string | string[] }>()
-  const eventId = Array.isArray(params?.eventId) ? params.eventId[0] : params?.eventId
+  const pathname = usePathname()
+  const eventIdFromParams = Array.isArray(params?.eventId) ? params.eventId[0] : params?.eventId
+  const eventIdFromPath = pathname?.split("/").filter(Boolean).pop()
+  const eventId = eventIdFromParams || eventIdFromPath
 
   const [event, setEvent] = useState<BackendEvent | null>(null)
   const [campaign, setCampaign] = useState<BackendCampaignDetail | null>(null)
@@ -562,9 +565,27 @@ export default function EventDetailPage() {
                                 [platform]: currentIndex + 1,
                               }))
                             } else {
-                              const freshCampaign = await generateCampaign(event.id, generationLength)
-                              const freshDetail = await getCampaignDetail(freshCampaign.campaign_id)
+                              // Request generation for the event (may append to existing draft campaign)
+                              const genResp = await generateCampaign(event.id, generationLength)
+
+                              // Determine campaign id: prefer backend response, otherwise find latest campaign for event
+                              let campaignId = genResp?.campaign_id
+                              if (!campaignId) {
+                                try {
+                                  const summaries = await getCampaigns(50)
+                                  const found = summaries.find((s) => s.event_id === event.id)
+                                  campaignId = found?.id
+                                } catch (e) {
+                                  // ignore and let getCampaignDetail below fail with a helpful message
+                                }
+                              }
+
+                              if (!campaignId) throw new Error('Failed to locate campaign after generation')
+
+                              const freshDetail = await getCampaignDetail(campaignId)
                               setCampaign(freshDetail)
+
+                              // Recompute grouping and select newest variation for each platform
                               const grouped = groupDraftsByPlatform(freshDetail.content)
                               const nextSelection: Record<string, number> = {}
                               const nextLengths: Record<string, ContentLength> = {}
@@ -572,12 +593,14 @@ export default function EventDetailPage() {
                                 const list = grouped[key] || []
                                 const last = list[list.length - 1]
                                 nextSelection[key] = last?.variation_num || 1
-                                nextLengths[key] = generationLengthByPlatform[key] || "medium"
+                                // preserve any per-platform user selection length; default to medium
+                                nextLengths[key] = generationLengthByPlatform[key] || 'medium'
                               }
+
                               setSelectedVariationByPlatform(nextSelection)
                               setGenerationLengthByPlatform((state) => ({
-                                ...nextLengths,
                                 ...state,
+                                ...nextLengths,
                               }))
                               setApprovedDraftIds({})
                               setEventPublished(false)
