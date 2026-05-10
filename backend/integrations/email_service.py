@@ -1,16 +1,27 @@
 """
-Email service integration (SMTP) skeleton for Aevum AI
-Provides a simple `EmailService` class with `send_email` method.
-This uses configuration from `config.py` and supports TLS/SSL.
+Email service integration (SMTP & Gmail API) for Aevum AI
+Provides a `EmailService` class with `send_email` method.
+Prefers Gmail API if credentials are set; falls back to SMTP.
 """
 from typing import Optional
 import socket
 import smtplib
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 
 from config import config
+
+# Gmail API imports (optional - graceful fallback if not installed)
+try:
+    from google.oauth2 import credentials
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    GMAIL_API_AVAILABLE = True
+except ImportError:
+    GMAIL_API_AVAILABLE = False
+    print("[EmailService] Warning: Gmail API libraries not available. Will use SMTP fallback.")
 
 
 class EmailService:
@@ -57,8 +68,68 @@ class EmailService:
             print(f"[SMTP Debug] IPv4 resolution failed for {host}: {exc}")
         return host
 
+    def _send_via_gmail_api(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
+        """Send email via Gmail API using OAuth2 refresh token. Returns True on success, False otherwise."""
+        try:
+            if not GMAIL_API_AVAILABLE:
+                print("[Gmail API] Libraries not available")
+                return False
+            
+            if not (config.GMAIL_CLIENT_ID and config.GMAIL_CLIENT_SECRET and config.GMAIL_REFRESH_TOKEN):
+                print("[Gmail API] Credentials not configured")
+                return False
+            
+            print(f"[Gmail API] Sending to {to_address} via Gmail API...")
+
+            # Create credentials object from refresh token
+            creds = credentials.Credentials(
+                None,  # access_token (will be generated from refresh_token)
+                refresh_token=config.GMAIL_REFRESH_TOKEN,
+                token_uri=config.GOOGLE_TOKEN_URI,
+                client_id=config.GMAIL_CLIENT_ID,
+                client_secret=config.GMAIL_CLIENT_SECRET,
+            )
+
+            # Refresh the access token using the refresh token
+            creds.refresh(Request())
+
+            # Build Gmail service
+            service = build("gmail", "v1", credentials=creds)
+
+            # Create message
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = config.GMAIL_FROM_ADDRESS or config.SMTP_USERNAME
+            msg['To'] = to_address
+
+            part = MIMEText(body, 'html' if html else 'plain')
+            msg.attach(part)
+
+            # Send message
+            raw_msg = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+            send_message = {'raw': raw_msg}
+            service.users().messages().send(userId='me', body=send_message).execute()
+
+            print(f"✓ Email sent via Gmail API to {to_address}")
+            return True
+        except Exception as e:
+            import traceback
+            print(f"⚠ Gmail API error: {e}")
+            print(f"[Gmail API Debug] Traceback: {traceback.format_exc()}")
+            return False
+
     def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
-        """Send an email via SMTP. Returns True on success, False otherwise."""
+        """Send an email via Gmail API (if configured) or SMTP. Returns True on success, False otherwise."""
+        
+        # Try Gmail API first if configured
+        if config.GMAIL_REFRESH_TOKEN:
+            print(f"[EmailService] Attempting Gmail API send...")
+            if self._send_via_gmail_api(to_address, subject, body, html):
+                return True
+            else:
+                print(f"[EmailService] Gmail API failed, falling back to SMTP...")
+        
+        # Fall back to SMTP
         try:
             # Debug: log SMTP config at send time
             print(f"[SMTP Debug] Host: {self.smtp_host}, Connect host: {self.smtp_connect_host}, Port: {self.smtp_port}, User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}")

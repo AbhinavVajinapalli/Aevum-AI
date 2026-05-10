@@ -36,7 +36,7 @@ class Config:
     # Allow interactive local OAuth login only when explicitly enabled
     ALLOW_INTERACTIVE_OAUTH = os.getenv("ALLOW_INTERACTIVE_OAUTH", "True").lower() == "true"
     
-    # Email
+    # Email - SMTP (legacy fallback)
     SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
     # Support common SMTP credential aliases used in different hosting setups.
@@ -50,6 +50,12 @@ class Config:
     )
     EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "Aevum AI")
     TEAM_EMAIL = os.getenv("TEAM_EMAIL", "")
+
+    # Gmail API (preferred email method on Render)
+    GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
+    GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
+    GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
+    GMAIL_FROM_ADDRESS = os.getenv("GMAIL_FROM_ADDRESS", "")
 
     # Default account used for dashboard actions (can be overridden via env)
     DEFAULT_ACCOUNT_EMAIL = os.getenv("DEFAULT_ACCOUNT_EMAIL", SMTP_USERNAME)
