@@ -6,6 +6,7 @@ import { useParams } from "next/navigation"
 import {
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Mail,
   MessageSquareMore,
@@ -153,6 +154,7 @@ export default function EventDetailPage() {
   const [selectedVariationByPlatform, setSelectedVariationByPlatform] = useState<Record<string, number>>({})
   const [generationLengthByPlatform, setGenerationLengthByPlatform] = useState<Record<string, ContentLength>>({})
   const [approvedDraftIds, setApprovedDraftIds] = useState<Record<string, boolean>>({})
+  const [expandedDraftIds, setExpandedDraftIds] = useState<Record<string, boolean>>({})
   const [eventPublished, setEventPublished] = useState(false)
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -454,7 +456,7 @@ export default function EventDetailPage() {
                     {isApproved && <Badge>{isSent ? "Sent" : "Approved"}</Badge>}
                   </div>
 
-                  <div className="mt-4 min-h-0 flex-1 rounded-xl border bg-muted/20 p-4">
+                  <div className="mt-4 space-y-2 rounded-xl border bg-muted/20 p-4">
                     {editingId === selected.id ? (
                       <div className="space-y-3">
                         <textarea
@@ -492,9 +494,32 @@ export default function EventDetailPage() {
                         </div>
                       </div>
                     ) : (
-                      <ScrollArea className="max-h-[320px] pr-3">
-                        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selected.content_text}</pre>
-                      </ScrollArea>
+                      <>
+                        <div className="max-h-[180px] overflow-hidden">
+                          <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selected.content_text}</pre>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setExpandedDraftIds((prev) => ({
+                              ...prev,
+                              [selected.id]: !prev[selected.id],
+                            }))
+                          }}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                        >
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform ${expandedDraftIds[selected.id] ? "rotate-180" : ""}`}
+                          />
+                          {expandedDraftIds[selected.id] ? "Read less" : "Read more"}
+                        </button>
+                        {expandedDraftIds[selected.id] && (
+                          <div className="mt-3 rounded-lg bg-background/50 p-3">
+                            <ScrollArea className="max-h-[300px] pr-3">
+                              <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{selected.content_text}</pre>
+                            </ScrollArea>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
