@@ -122,6 +122,18 @@ async def root_get():
     return JSONResponse({"status": "ok", "app": config.APP_NAME, "api": "/api"})
 
 
+@app.get("/api/debug/smtp-config", tags=["Debug"])
+async def debug_smtp_config():
+    """Debug endpoint to inspect SMTP configuration (for troubleshooting only)."""
+    return {
+        "smtp_server": config.SMTP_SERVER,
+        "smtp_port": config.SMTP_PORT,
+        "smtp_username": config.SMTP_USERNAME[:20] + "***" if config.SMTP_USERNAME else "(empty)",
+        "smtp_password_set": bool(config.SMTP_PASSWORD),
+        "default_account_email": config.DEFAULT_ACCOUNT_EMAIL,
+    }
+
+
 # ============================================================================
 # EVENTS ENDPOINTS
 # ============================================================================
