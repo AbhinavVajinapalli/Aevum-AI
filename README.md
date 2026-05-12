@@ -10,12 +10,17 @@ Aevum AI helps teams promote events by generating channel-specific content, rout
 
 - Google Calendar sync for event ingestion.
 - AI-assisted campaign and variation generation.
+- Fallback content generation when the AI provider is unavailable.
 - Multi-platform content workflow (email, WhatsApp, LinkedIn drafts).
 - Approval lifecycle support (`pending`, `approved`, and sent tracking).
 - Dashboard cards for analytics, campaigns, and approval queues.
 - Send actions from dashboard for approved Email and WhatsApp content.
 - LinkedIn generation visible in workflow with UI-level `Coming soon` publishing state.
 - Integration health visibility in dashboard (SMTP, Gemini, Calendar, LinkedIn).
+- Gmail API publishing support with SMTP fallback for local and hosted environments.
+- Draft version cycling for generated content so new variations append to the existing campaign.
+- Notifications state persisted in browser `localStorage`.
+- More resilient event detail routing and dev-origin support for local browser access.
 
 ## Repository Structure
 
@@ -69,6 +74,13 @@ New: Gmail API
 - `GMAIL_CLIENT_SECRET` – OAuth2 Client Secret for Gmail API
 - `GMAIL_REFRESH_TOKEN` – Long-lived refresh token to mint access tokens
 - `GMAIL_FROM_ADDRESS` – From address used when sending via Gmail API
+
+Recent backend/frontend updates include:
+
+- Campaign generation now appends new variations to an existing draft campaign instead of overwriting it.
+- Email publishing prefers Gmail API and falls back to SMTP when needed.
+- The dashboard now handles localhost and `127.0.0.1` dev origins more reliably.
+- Event detail pages work even when route params are unavailable in browser navigation.
 
 ## Production Deployment
 

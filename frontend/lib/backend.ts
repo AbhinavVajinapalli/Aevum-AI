@@ -137,6 +137,10 @@ export async function getCampaignDetail(campaignId: string): Promise<BackendCamp
   return requestApi<BackendCampaignDetail>(`/campaigns/${encodeURIComponent(campaignId)}`)
 }
 
+export async function getCampaignByEvent(eventId: string): Promise<BackendCampaignDetail> {
+  return requestApi<BackendCampaignDetail>(`/campaigns/by-event/${encodeURIComponent(eventId)}`)
+}
+
 export async function getPendingApprovals(limit = 20): Promise<BackendContentItem[]> {
   const response = await requestApi<{ total_pending: number; items: BackendContentItem[] }>(
     `/approvals/pending?limit=${limit}`

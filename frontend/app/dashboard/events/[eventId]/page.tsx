@@ -28,9 +28,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   approveContent,
   bulkApproveContent,
+  getCampaignByEvent,
   generateCampaign,
   getCampaignDetail,
-  getCampaigns,
   getEventDetail,
   getIntegrationsStatus,
   publishEmail,
@@ -88,8 +88,29 @@ function platformIcon(platform: string) {
   return <MessageSquareMore className="h-4 w-4" />
 }
 
+function getPrimaryActionLabel(isSent: boolean, platform: string) {
+  if (isSent) return "Sent"
+  if (platform === "linkedin") return "Approve draft"
+  return "Send"
+}
+
+function updateEditedCampaignContent(
+  campaign: BackendCampaignDetail | null,
+  selectedId: string,
+  editedText: string,
+) {
+  if (!campaign) return campaign
+
+  return {
+    ...campaign,
+    content: campaign.content.map((contentItem) =>
+      contentItem.id === selectedId ? { ...contentItem, content_text: editedText } : contentItem
+    ),
+  }
+}
+
 function getLifecycleSteps(event: BackendEvent | null): LifecycleStep[] {
-  const eventKind = event?.event_type?.replace(/_/g, " ") || "event"
+  const eventKind = event?.event_type?.replaceAll("_", " ") || "event"
   return [
     {
       key: "pre_event",
@@ -146,7 +167,7 @@ export default function EventDetailPage() {
   const params = useParams<{ eventId?: string | string[] }>()
   const pathname = usePathname()
   const eventIdFromParams = Array.isArray(params?.eventId) ? params.eventId[0] : params?.eventId
-  const eventIdFromPath = pathname?.split("/").filter(Boolean).pop()
+  const eventIdFromPath = pathname?.split("/").filter(Boolean).findLast(() => true)
   const eventId = eventIdFromParams || eventIdFromPath
 
   const [event, setEvent] = useState<BackendEvent | null>(null)
@@ -171,23 +192,23 @@ export default function EventDetailPage() {
         setLoading(true)
         setError(null)
 
-        const [eventDetail, campaignSummaries, integrationStatus] = await Promise.all([
+        const [eventDetail, integrationStatus] = await Promise.all([
           getEventDetail(eventId),
-          getCampaigns(100),
           getIntegrationsStatus(),
         ])
 
         setEvent(eventDetail)
         setIntegrations(integrationStatus)
 
-        const existingSummary = campaignSummaries.find((item) => item.event_id === eventId)
         let detail: BackendCampaignDetail | null = null
-
-        if (existingSummary) {
-          detail = await getCampaignDetail(existingSummary.id)
-        } else {
-          const generated = await generateCampaign(eventId, "medium")
-          detail = await getCampaignDetail(generated.campaign_id)
+        try {
+          detail = await getCampaignByEvent(eventId)
+        } catch (campaignErr) {
+          if (campaignErr instanceof Error && campaignErr.message.includes("Campaign not found")) {
+            detail = null
+          } else {
+            throw campaignErr
+          }
         }
 
         setCampaign(detail)
@@ -229,9 +250,10 @@ export default function EventDetailPage() {
   const lifecycleSteps = useMemo(() => getLifecycleSteps(event), [event])
 
   const defaultActor = process.env.NEXT_PUBLIC_DEFAULT_ACCOUNT_EMAIL || "2303a52486@sru.edu.in"
+  const showDraftGrid = campaign !== null
 
   const resolveWhatsAppRecipient = () => {
-    const normalized = DEFAULT_WHATSAPP_NUMBER.replace(/\s+/g, "")
+    const normalized = DEFAULT_WHATSAPP_NUMBER.replaceAll(" ", "")
     return normalized.startsWith("+") ? normalized : `+91${normalized}`
   }
 
@@ -258,7 +280,7 @@ export default function EventDetailPage() {
     )
   }
 
-  if (!event || !campaign) {
+  if (!event) {
     return null
   }
 
@@ -276,7 +298,7 @@ export default function EventDetailPage() {
               <Badge variant="outline" className="capitalize">
                 {stageLabel(event.lifecycle_stage)} Cycle
               </Badge>
-              <Badge variant="secondary">{event.event_type.replace(/_/g, " ")}</Badge>
+              <Badge variant="secondary">{event.event_type.replaceAll("_", " ")}</Badge>
             </div>
             <h1 className="mt-3 text-3xl font-bold tracking-tight">{event.title}</h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">{event.description}</p>
@@ -284,53 +306,85 @@ export default function EventDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={async () => {
-              try {
-                setWorkingPlatform("event")
-                const ids = selectedDrafts.map((item) => item.selected.id)
-                if (!ids.length) return
-                const pendingIds = selectedDrafts
-                  .filter((item) => item.selected.approval_status !== "approved")
-                  .map((item) => item.selected.id)
+          {campaign ? (
+            <Button
+              onClick={async () => {
+                try {
+                  setWorkingPlatform("event")
+                  const ids = selectedDrafts.map((item) => item.selected.id)
+                  if (!ids.length) return
+                  const pendingIds = selectedDrafts
+                    .filter((item) => item.selected.approval_status !== "approved")
+                    .map((item) => item.selected.id)
 
-                if (pendingIds.length) {
-                  await bulkApproveContent(pendingIds, defaultActor)
-                }
+                  if (pendingIds.length) {
+                    await bulkApproveContent(pendingIds, defaultActor)
+                  }
 
-                for (const draft of selectedDrafts) {
-                  if (draft.selected.platform === "email") {
-                    await publishEmail(draft.selected.id, DEFAULT_EMAIL_RECIPIENT, true)
+                  for (const draft of selectedDrafts) {
+                    if (draft.selected.platform === "email") {
+                      await publishEmail(draft.selected.id, DEFAULT_EMAIL_RECIPIENT, true)
+                    }
+                    if (draft.selected.platform === "linkedin") {
+                      await publishLinkedIn(draft.selected.id)
+                    }
+                    if (draft.selected.platform === "whatsapp") {
+                      await publishWhatsApp(draft.selected.id, resolveWhatsAppRecipient())
+                    }
+                    if (draft.selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
+                      await publishTelegram(draft.selected.id)
+                    }
                   }
-                  if (draft.selected.platform === "linkedin") {
-                    await publishLinkedIn(draft.selected.id)
-                  }
-                  if (draft.selected.platform === "whatsapp") {
-                    await publishWhatsApp(draft.selected.id, resolveWhatsAppRecipient())
-                  }
-                  if (draft.selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
-                    await publishTelegram(draft.selected.id)
-                  }
+                  const refreshed = await getCampaignDetail(campaign.campaign.id)
+                  setCampaign(refreshed)
+                  setApprovedDraftIds((state) => {
+                    const next = { ...state }
+                    for (const id of ids) next[id] = true
+                    return next
+                  })
+                  setEventPublished(true)
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to approve event")
+                } finally {
+                  setWorkingPlatform(null)
                 }
-                const refreshed = await getCampaignDetail(campaign.campaign.id)
-                setCampaign(refreshed)
-                setApprovedDraftIds((state) => {
-                  const next = { ...state }
-                  for (const id of ids) next[id] = true
-                  return next
-                })
-                setEventPublished(true)
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to approve event")
-              } finally {
-                setWorkingPlatform(null)
-              }
-            }}
-            disabled={workingPlatform === "event" || eventPublished}
-          >
-            <CheckCircle2 className="mr-2 h-4 w-4" />
-            {eventPublished ? "Published" : "Publish drafts"}
-          </Button>
+              }}
+              disabled={workingPlatform === "event" || eventPublished}
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {eventPublished ? "Published" : "Publish drafts"}
+            </Button>
+          ) : (
+            <Button
+              onClick={async () => {
+                try {
+                  setWorkingPlatform("event")
+                  const generated = await generateCampaign(event.id, "medium")
+                  const refreshed = await getCampaignDetail(generated.campaign_id)
+                  setCampaign(refreshed)
+
+                  const grouped = groupDraftsByPlatform(refreshed.content)
+                  const initialSelection: Record<string, number> = {}
+                  const initialLengths: Record<string, ContentLength> = {}
+                  for (const platform of Object.keys(grouped)) {
+                    initialSelection[platform] = grouped[platform][0]?.variation_num || 1
+                    initialLengths[platform] = "medium"
+                  }
+                  setSelectedVariationByPlatform(initialSelection)
+                  setGenerationLengthByPlatform(initialLengths)
+                  setEventPublished(false)
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Failed to generate drafts")
+                } finally {
+                  setWorkingPlatform(null)
+                }
+              }}
+              disabled={workingPlatform === "event"}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Generate drafts
+            </Button>
+          )}
         </div>
       </div>
 
@@ -436,8 +490,9 @@ export default function EventDetailPage() {
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 xl:grid-cols-3 items-stretch">
-            {selectedDrafts.map(({ platform, selected, drafts }) => {
+          {showDraftGrid ? (
+            <div className="grid gap-4 xl:grid-cols-3 items-stretch">
+              {selectedDrafts.map(({ platform, selected, drafts }) => {
               const maxVariation = drafts.length
               const currentVariation = selectedVariationByPlatform[platform] || selected.variation_num
               const generationLength = generationLengthByPlatform[platform] || "medium"
@@ -473,15 +528,7 @@ export default function EventDetailPage() {
                             size="sm"
                             onClick={() => {
                               // Save edited text (update optimistically)
-                              setCampaign((prev) => {
-                                if (!prev) return prev
-                                return {
-                                  ...prev,
-                                  content: prev.content.map((c) =>
-                                    c.id === selected.id ? { ...c, content_text: editedText } : c
-                                  ),
-                                }
-                              })
+                              setCampaign((prev) => updateEditedCampaignContent(prev, selected.id, editedText))
                               setEditingId(null)
                             }}
                           >
@@ -575,9 +622,7 @@ export default function EventDetailPage() {
                                   const summaries = await getCampaigns(50)
                                   const found = summaries.find((s) => s.event_id === event.id)
                                   campaignId = found?.id
-                                } catch (e) {
-                                  // ignore and let getCampaignDetail below fail with a helpful message
-                                }
+                                } catch (e) { console.error("Failed to auto-locate campaign:", e) }
                               }
 
                               if (!campaignId) throw new Error('Failed to locate campaign after generation')
@@ -591,7 +636,7 @@ export default function EventDetailPage() {
                               const nextLengths: Record<string, ContentLength> = {}
                               for (const key of Object.keys(grouped)) {
                                 const list = grouped[key] || []
-                                const last = list[list.length - 1]
+                                const last = list.at(-1)
                                 nextSelection[key] = last?.variation_num || 1
                                 // preserve any per-platform user selection length; default to medium
                                 nextLengths[key] = generationLengthByPlatform[key] || 'medium'
@@ -648,7 +693,7 @@ export default function EventDetailPage() {
                         disabled={workingPlatform === platform || isSent}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" />
-                        {isSent ? "Sent" : selected.platform === "linkedin" ? "Approve draft" : "Send"}
+                        {getPrimaryActionLabel(isSent, selected.platform)}
                       </Button>
                       <Button
                         size="sm"
@@ -670,7 +715,12 @@ export default function EventDetailPage() {
                 </div>
               )
             })}
-          </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-sm text-muted-foreground">
+              No drafts have been generated yet for this event. Use Generate drafts to create the first version for each platform.
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
@@ -688,3 +738,6 @@ export default function EventDetailPage() {
     </div>
   )
 }
+
+
+

@@ -71,6 +71,139 @@ whatsapp_service = WhatsAppService()
 
 
 # ============================================================================
+# CONSTANTS
+# ============================================================================
+# Database queries
+QUERY_GET_CONTENT_BY_ID = "SELECT * FROM generated_content " + "WHERE id = ?"
+
+# Error messages
+ERROR_CONTENT_NOT_FOUND = "Content " + "not found"
+ERROR_CONTENT_MUST_APPROVE = "Content must be approved " + "before sending"
+
+
+def _get_event_or_404(cursor: sqlite3.Cursor, event_id: str) -> Dict[str, Any]:
+    cursor.execute("SELECT * FROM events WHERE id = ?", (event_id,))
+    event_row = cursor.fetchone()
+    if not event_row:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return dict(event_row)
+
+
+def _build_agent_response(event: Dict[str, Any], content_length: str) -> Dict[str, Any]:
+    try:
+        response = publicity_agent.analyze_and_generate_content(
+            event=event,
+            lifecycle_stage=event["lifecycle_stage"],
+            urgency_score=event["urgency_score"],
+            content_length=content_length,
+        )
+    except Exception as agent_error:
+        print(f"⚠ Agent generation failed, using fallback content: {agent_error}")
+        response = publicity_agent._build_fallback_response(event, event["lifecycle_stage"])
+
+    if isinstance(response, dict):
+        return response
+
+    try:
+        return dict(response)
+    except Exception:
+        return publicity_agent._build_fallback_response(event, event["lifecycle_stage"])
+
+
+def _get_or_create_campaign(cursor: sqlite3.Cursor, event_id: str, event: Dict[str, Any], agent_response: Dict[str, Any]) -> str:
+    cursor.execute(
+        "SELECT id FROM campaigns WHERE event_id = ? AND status = 'draft' ORDER BY created_at DESC LIMIT 1",
+        (event_id,)
+    )
+    existing = cursor.fetchone()
+    if existing:
+        campaign_id = existing["id"]
+        try:
+            cursor.execute("UPDATE campaigns SET metadata = ? WHERE id = ?", (json.dumps(agent_response), campaign_id))
+        except Exception:
+            pass
+        return campaign_id
+
+    campaign_id = f"camp_{uuid.uuid4().hex[:8]}"
+    cursor.execute(
+        """
+        INSERT INTO campaigns (id, event_id, stage, status, metadata)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (campaign_id, event_id, event["lifecycle_stage"], "draft", json.dumps(agent_response))
+    )
+    return campaign_id
+
+
+def _store_generated_content(cursor: sqlite3.Cursor, campaign_id: str, agent_response: Dict[str, Any]) -> List[str]:
+    content_ids: List[str] = []
+    for platform_content in agent_response.get("variations", []):
+        platform = platform_content.get("platform", "email")
+        content_ids.append(_insert_generated_content(cursor, campaign_id, platform, platform_content, agent_response))
+
+    return content_ids
+
+
+def _insert_generated_content(
+    cursor: sqlite3.Cursor,
+    campaign_id: str,
+    platform: str,
+    platform_content: Dict[str, Any],
+    agent_response: Dict[str, Any],
+) -> str:
+    cursor.execute(
+        "SELECT MAX(variation_num) as max_var FROM generated_content WHERE campaign_id = ? AND platform = ?",
+        (campaign_id, platform)
+    )
+    mv = cursor.fetchone()
+    prev_max = mv["max_var"] if mv and mv["max_var"] is not None else 0
+    var_num = int(prev_max) + 1
+
+    content_text = _build_generated_content_text(platform, platform_content)
+    hashtags = ",".join(platform_content.get("hashtags", []))
+    scheduled_time = platform_content.get("scheduled_time", "09:00")
+
+    content_id = f"cont_{uuid.uuid4().hex[:8]}"
+    cursor.execute(
+        """
+        INSERT INTO generated_content 
+        (id, campaign_id, platform, content_text, variation_num, tone, hashtags, scheduled_time, status, approval_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            content_id,
+            campaign_id,
+            platform,
+            content_text,
+            var_num,
+            agent_response.get("tone", "professional"),
+            hashtags,
+            scheduled_time,
+            "draft",
+            "pending",
+        )
+    )
+    return content_id
+
+
+def _build_generated_content_text(platform: str, platform_content: Dict[str, Any]) -> str:
+    content_text = platform_content.get("variation_1", "")
+    if platform != "email":
+        return content_text
+
+    templates = platform_content.get("email_templates", {})
+    template = templates.get("variation_1", {}) if isinstance(templates, dict) else {}
+    subject = (template.get("subject") or "").strip() if isinstance(template, dict) else ""
+    plain_body = (template.get("plain") or "").strip() if isinstance(template, dict) else ""
+
+    if subject or plain_body:
+        subject_line = f"Subject: {subject}" if subject else str(content_text).strip()
+        return f"{subject_line}\n\n{plain_body}".strip()
+
+    return content_text
+
+
+# ============================================================================
 # STARTUP / SHUTDOWN
 # ============================================================================
 
@@ -84,7 +217,7 @@ async def startup_event():
     print(f"[SMTP Config] Username: {config.SMTP_USERNAME[:20] if config.SMTP_USERNAME else '(EMPTY)'}")
     print(f"[SMTP Config] Password set: {bool(config.SMTP_PASSWORD)}")
     print(f"[SMTP Config] DEFAULT_ACCOUNT_EMAIL: {config.DEFAULT_ACCOUNT_EMAIL}")
-    print(f"✓ Syncing events from Google Calendar...")
+    print("✓ Syncing events from Google Calendar...")
     try:
         calendar_service.fetch_and_sync_events()
     except Exception as e:
@@ -143,7 +276,7 @@ async def debug_smtp_config():
 # EVENTS ENDPOINTS
 # ============================================================================
 
-@app.get("/api/events", tags=["Events"], response_model=List[Dict[str, Any]])
+@app.get("/api/events", tags=["Events"], response_model=List[Dict[str, Any]], responses={500: {"description": "Internal server error"}})
 async def get_events(
     limit: int = Query(10, ge=1, le=100),
     stage: Optional[str] = Query(None, pattern="^(pre_event|during_event|post_event)$")
@@ -173,7 +306,12 @@ async def get_events(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/events/{event_id}", tags=["Events"])
+@app.get("/api/events/{event_id}", tags=["Events"],
+    responses={
+        404: {"description": "Event not found"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def get_event_detail(event_id: str):
     """Get single event details"""
     try:
@@ -193,8 +331,18 @@ async def get_event_detail(event_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/content/{content_id}/publish/whatsapp", tags=["Publishing"])
-async def publish_whatsapp(content_id: str, recipient: Optional[str] = Query(None), message: Optional[str] = Query(None)):
+@app.post("/api/content/{content_id}/publish/whatsapp", tags=["Publishing"],
+    responses={
+        400: {"description": "Bad request - content must be approved or recipient not provided"},
+        404: {"description": "Content not found"},
+        500: {"description": "Internal server error"}
+    }
+)
+async def publish_whatsapp(
+    content_id: str,
+    recipient: Optional[str] = Query(None),
+    message: Optional[str] = Query(None)
+):
     """Publish approved content via WhatsApp using Twilio.
 
     If `recipient` is provided it should be an E.164 phone number (e.g. +15558675310).
@@ -206,16 +354,16 @@ async def publish_whatsapp(content_id: str, recipient: Optional[str] = Query(Non
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+        cursor.execute(QUERY_GET_CONTENT_BY_ID, (content_id,))
         content_row = cursor.fetchone()
 
         if not content_row:
-            raise HTTPException(status_code=404, detail="Content not found")
+            raise HTTPException(status_code=404, detail=ERROR_CONTENT_NOT_FOUND)
 
         content = dict(content_row)
 
         if content.get('approval_status') != 'approved':
-            raise HTTPException(status_code=400, detail="Content must be approved before sending")
+            raise HTTPException(status_code=400, detail=ERROR_CONTENT_MUST_APPROVE)
 
         # Defensive: only accept message if it's a non-empty string (avoid FastAPI Query sentinel objects)
         if isinstance(message, str) and message.strip():
@@ -256,23 +404,33 @@ async def publish_whatsapp(content_id: str, recipient: Optional[str] = Query(Non
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/content/{content_id}/publish/telegram", tags=["Publishing"])
-async def publish_telegram(content_id: str, chat_id: Optional[str] = Query(None), message: Optional[str] = Query(None)):
+@app.post("/api/content/{content_id}/publish/telegram", tags=["Publishing"],
+    responses={
+        400: {"description": "Bad request - content must be approved"},
+        404: {"description": "Content not found"},
+        500: {"description": "Internal server error"}
+    }
+)
+async def publish_telegram(
+    content_id: str,
+    chat_id: Optional[str] = Query(None),
+    message: Optional[str] = Query(None)
+):
     """Send approved content via Telegram."""
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+        cursor.execute(QUERY_GET_CONTENT_BY_ID, (content_id,))
         content_row = cursor.fetchone()
 
         if not content_row:
-            raise HTTPException(status_code=404, detail="Content not found")
+            raise HTTPException(status_code=404, detail=ERROR_CONTENT_NOT_FOUND)
 
         content = dict(content_row)
         if content['approval_status'] != 'approved':
-            raise HTTPException(status_code=400, detail="Content must be approved before sending")
+            raise HTTPException(status_code=400, detail=ERROR_CONTENT_MUST_APPROVE)
 
         text = message or content.get('content_text') or 'Update from Aevum AI'
         result = telegram_service.send_message(chat_id, text)
@@ -298,7 +456,7 @@ async def publish_telegram(content_id: str, chat_id: Optional[str] = Query(None)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/events/sync", tags=["Events"])
+@app.post("/api/events/sync", tags=["Events"], responses={500: {"description": "Internal server error"}})
 async def sync_events():
     """Manually trigger event sync from Google Calendar"""
     try:
@@ -316,7 +474,12 @@ async def sync_events():
 # CAMPAIGNS & CONTENT GENERATION
 # ============================================================================
 
-@app.post("/api/campaigns/generate", tags=["Campaigns"])
+@app.post("/api/campaigns/generate", tags=["Campaigns"],
+    responses={
+        404: {"description": "Event not found"},
+        500: {"description": "Internal server error or content generation failed"}
+    }
+)
 async def generate_campaign(event_id: str, content_length: str = "medium"):
     """
     Generate content for an event using EventPublicityAgent
@@ -324,122 +487,21 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
     Returns one initial variation per platform
     """
     try:
-        import traceback
-        # Validate content_length
         if content_length not in ["short", "medium", "long"]:
             content_length = "medium"
-        
-        # Get event
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
-        cursor.execute("SELECT * FROM events WHERE id = ?", (event_id,))
-        event_row = cursor.fetchone()
-        
-        if not event_row:
-            raise HTTPException(status_code=404, detail="Event not found")
-        
-        event = dict(event_row)
-        
-        # Call the intelligent agent with content_length preference, but always keep a local fallback.
-        try:
-            agent_response = publicity_agent.analyze_and_generate_content(
-                event=event,
-                lifecycle_stage=event['lifecycle_stage'],
-                urgency_score=event['urgency_score'],
-                content_length=content_length
-            )
-        except Exception as agent_error:
-            print(f"⚠ Agent generation failed, using fallback content: {agent_error}")
-            print(traceback.format_exc())
-            agent_response = publicity_agent._build_fallback_response(event, event['lifecycle_stage'])
 
-        if not isinstance(agent_response, dict):
-            try:
-                agent_response = dict(agent_response)
-            except Exception:
-                agent_response = publicity_agent._build_fallback_response(event, event['lifecycle_stage'])
-        
-        # If a draft campaign already exists for this event, append new variations
-        cursor.execute(
-            "SELECT id FROM campaigns WHERE event_id = ? AND status = 'draft' ORDER BY created_at DESC LIMIT 1",
-            (event_id,)
-        )
-        existing = cursor.fetchone()
-        if existing:
-            campaign_id = existing['id']
-            # Optionally update metadata to latest analysis (overwrite)
-            try:
-                cursor.execute("UPDATE campaigns SET metadata = ? WHERE id = ?", (json.dumps(agent_response), campaign_id))
-            except Exception:
-                pass
-        else:
-            campaign_id = f"camp_{uuid.uuid4().hex[:8]}"
-            cursor.execute("""
-                INSERT INTO campaigns (id, event_id, stage, status, metadata)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                campaign_id,
-                event_id,
-                event['lifecycle_stage'],
-                'draft',
-                json.dumps(agent_response)
-            ))
+        event = _get_event_or_404(cursor, event_id)
+        agent_response = _build_agent_response(event, content_length)
+        campaign_id = _get_or_create_campaign(cursor, event_id, event, agent_response)
+        content_ids = _store_generated_content(cursor, campaign_id, agent_response)
 
-        # Store generated content variations. If appending, increment variation_num.
-        content_ids = []
-        for platform_content in agent_response.get('variations', []):
-            platform = platform_content.get('platform', 'email')
-
-            # Determine next variation number for this campaign+platform
-            cursor.execute(
-                "SELECT MAX(variation_num) as max_var FROM generated_content WHERE campaign_id = ? AND platform = ?",
-                (campaign_id, platform)
-            )
-            mv = cursor.fetchone()
-            prev_max = mv['max_var'] if mv and mv['max_var'] is not None else 0
-            var_num = int(prev_max) + 1
-
-            content_text = platform_content.get('variation_1', '')
-
-            # Ensure email draft stores both subject and body, not just subject.
-            if platform == 'email':
-                templates = platform_content.get('email_templates', {})
-                template = templates.get('variation_1', {}) if isinstance(templates, dict) else {}
-                subject = (template.get('subject') or '').strip() if isinstance(template, dict) else ''
-                plain_body = (template.get('plain') or '').strip() if isinstance(template, dict) else ''
-
-                if subject or plain_body:
-                    subject_line = f"Subject: {subject}" if subject else str(content_text).strip()
-                    content_text = f"{subject_line}\n\n{plain_body}".strip()
-
-            hashtags = ','.join(platform_content.get('hashtags', []))
-            scheduled_time = platform_content.get('scheduled_time', '09:00')
-
-            content_id = f"cont_{uuid.uuid4().hex[:8]}"
-            cursor.execute("""
-                INSERT INTO generated_content 
-                (id, campaign_id, platform, content_text, variation_num, tone, hashtags, scheduled_time, status, approval_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                content_id,
-                campaign_id,
-                platform,
-                content_text,
-                var_num,
-                agent_response.get('tone', 'professional'),
-                hashtags,
-                scheduled_time,
-                'draft',
-                'pending'
-            ))
-
-            content_ids.append(content_id)
-        
         conn.commit()
         conn.close()
-        
+
         return {
             "status": "success",
             "campaign_id": campaign_id,
@@ -448,20 +510,16 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
             "content_ids": content_ids,
             "message": f"Generated content with {len(content_ids)} variations across {len(agent_response.get('variations', []))} platforms"
         }
-        
     except HTTPException:
         raise
     except Exception as e:
         print(f"❌ Error generating campaign: {e}")
-        try:
-            import traceback
-            print(traceback.format_exc())
-        except Exception:
-            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/campaigns", tags=["Campaigns"])
+@app.get("/api/campaigns", tags=["Campaigns"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def list_campaigns(limit: int = Query(50, ge=1, le=500)):
     """Get all campaigns with summary info"""
     try:
@@ -509,7 +567,62 @@ async def list_campaigns(limit: int = Query(50, ge=1, le=500)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/campaigns/{campaign_id}", tags=["Campaigns"])
+@app.get("/api/campaigns/by-event/{event_id}", tags=["Campaigns"],
+    responses={
+        404: {"description": "Campaign not found"},
+        500: {"description": "Internal server error"}
+    }
+)
+async def get_campaign_by_event(event_id: str):
+    """Get the latest campaign and content for a specific event."""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT c.*, e.title as event_name, e.lifecycle_stage
+            FROM campaigns c
+            LEFT JOIN events e ON c.event_id = e.id
+            WHERE c.event_id = ?
+            ORDER BY c.created_at DESC
+            LIMIT 1
+            """,
+            (event_id,)
+        )
+        campaign_row = cursor.fetchone()
+
+        if not campaign_row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        campaign = dict(campaign_row)
+
+        cursor.execute(
+            "SELECT * FROM generated_content WHERE campaign_id = ? ORDER BY platform, variation_num",
+            (campaign["id"],)
+        )
+        content = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        return {
+            "campaign": campaign,
+            "content": content,
+            "total_variations": len(content)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/campaigns/{campaign_id}", tags=["Campaigns"],
+    responses={
+        404: {"description": "Campaign not found"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def get_campaign(campaign_id: str):
     """Get campaign and its generated content"""
     try:
@@ -548,7 +661,12 @@ async def get_campaign(campaign_id: str):
 # APPROVALS
 # ============================================================================
 
-@app.post("/api/approvals", tags=["Approvals"])
+@app.post("/api/approvals", tags=["Approvals"],
+    responses={
+        404: {"description": "Content not found"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def approve_content(
     content_id: str,
     approved_by: str,
@@ -560,9 +678,9 @@ async def approve_content(
         cursor = conn.cursor()
         
         # Verify content exists
-        cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+        cursor.execute(QUERY_GET_CONTENT_BY_ID, (content_id,))
         if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Content not found")
+            raise HTTPException(status_code=404, detail=ERROR_CONTENT_NOT_FOUND)
         
         # Create approval record
         approval_id = f"appr_{uuid.uuid4().hex[:8]}"
@@ -593,7 +711,9 @@ async def approve_content(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/approvals/{content_id}/reject", tags=["Approvals"])
+@app.post("/api/approvals/{content_id}/reject", tags=["Approvals"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def reject_content(content_id: str, reason: str = ""):
     """Reject generated content"""
     try:
@@ -618,7 +738,9 @@ async def reject_content(content_id: str, reason: str = ""):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/approvals/pending", tags=["Approvals"])
+@app.get("/api/approvals/pending", tags=["Approvals"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def get_pending_approvals(limit: int = Query(20, ge=1, le=100)):
     """Get all pending content awaiting approval"""
     try:
@@ -647,7 +769,9 @@ async def get_pending_approvals(limit: int = Query(20, ge=1, le=100)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/approvals/approved", tags=["Approvals"])
+@app.get("/api/approvals/approved", tags=["Approvals"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def get_approved_content(limit: int = Query(20, ge=1, le=100)):
     """Get all approved content ready to send (approved but not yet sent)"""
     try:
@@ -676,7 +800,9 @@ async def get_approved_content(limit: int = Query(20, ge=1, le=100)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/approvals/bulk-approve", tags=["Approvals"])
+@app.post("/api/approvals/bulk-approve", tags=["Approvals"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def bulk_approve_content(
     content_ids: List[str],
     approved_by: str,
@@ -693,7 +819,7 @@ async def bulk_approve_content(
         for content_id in content_ids:
             try:
                 # Verify content exists
-                cursor.execute("SELECT * FROM generated_content WHERE id = ?", (content_id,))
+                cursor.execute(QUERY_GET_CONTENT_BY_ID, (content_id,))
                 if not cursor.fetchone():
                     failed_ids.append(content_id)
                     continue
@@ -734,7 +860,13 @@ async def bulk_approve_content(
 # PUBLISHING / SENDING
 # ============================================================================
 
-@app.post("/api/content/{content_id}/publish/email", tags=["Publishing"])
+@app.post("/api/content/{content_id}/publish/email", tags=["Publishing"],
+    responses={
+        400: {"description": "Bad request - content must be approved or SMTP not configured"},
+        404: {"description": "Content not found"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def publish_email(
     content_id: str,
     recipient: Optional[str] = Query(None, description="Email recipient address"),
@@ -801,7 +933,13 @@ async def publish_email(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/content/{content_id}/publish/linkedin", tags=["Publishing"])
+@app.post("/api/content/{content_id}/publish/linkedin", tags=["Publishing"],
+    responses={
+        400: {"description": "Bad request - content must be approved or LinkedIn not configured"},
+        404: {"description": "Content not found"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def publish_linkedin(content_id: str):
     """Post approved content to LinkedIn"""
     try:
@@ -865,7 +1003,9 @@ async def publish_linkedin(content_id: str):
 # ANALYTICS
 # ============================================================================
 
-@app.get("/api/integrations/status", tags=["Integrations"])
+@app.get("/api/integrations/status", tags=["Integrations"],
+    responses={}
+)
 async def get_integrations_status():
     """Get status of optional third-party integrations."""
     return {
@@ -895,7 +1035,12 @@ async def get_integrations_status():
     }
 
 
-@app.get("/api/integrations/linkedin/oauth/start", tags=["Integrations"])
+@app.get("/api/integrations/linkedin/oauth/start", tags=["Integrations"],
+    responses={
+        400: {"description": "LinkedIn OAuth not configured"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def linkedin_oauth_start(state: Optional[str] = None):
     """Build the LinkedIn OAuth authorization URL for one-time consent."""
     try:
@@ -929,7 +1074,12 @@ async def linkedin_oauth_start(state: Optional[str] = None):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/integrations/linkedin/oauth/callback", tags=["Integrations"])
+@app.get("/api/integrations/linkedin/oauth/callback", tags=["Integrations"],
+    responses={
+        400: {"description": "Authorization failed or missing code"},
+        500: {"description": "Internal server error"}
+    }
+)
 async def linkedin_oauth_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None, error_description: Optional[str] = None):
     """Exchange the LinkedIn OAuth authorization code for an access token."""
     try:
@@ -962,7 +1112,9 @@ async def linkedin_oauth_callback(code: Optional[str] = None, state: Optional[st
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/analytics", tags=["Analytics"])
+@app.get("/api/analytics", tags=["Analytics"],
+    responses={500: {"description": "Internal server error"}}
+)
 async def get_analytics():
     """Get basic analytics"""
     try:
@@ -1016,8 +1168,9 @@ if __name__ == "__main__":
     
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         reload=config.DEBUG,
         log_level=config.LOG_LEVEL.lower()
     )
+

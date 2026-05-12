@@ -78,10 +78,13 @@ class Config:
     TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
     
     # CORS
+    LOCALHOST_ORIGIN = "http://localhost:3000"
+    LOOPBACK_ORIGIN = "http://127.0.0.1:3000"
+    
     @staticmethod
     def _parse_cors_origins(value: str | None) -> list[str]:
         if not value:
-            return ["http://localhost:3000", "http://127.0.0.1:3000"]
+            return [Config.LOCALHOST_ORIGIN, Config.LOOPBACK_ORIGIN]
 
         raw = value.strip()
         # Support JSON arrays: ["http://localhost:3000", "http://localhost:5173"]
@@ -95,10 +98,10 @@ class Config:
 
         # Fallback: comma-separated list
         origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
-        if "http://localhost:3000" not in origins:
-            origins.append("http://localhost:3000")
-        if "http://127.0.0.1:3000" not in origins:
-            origins.append("http://127.0.0.1:3000")
+        if Config.LOCALHOST_ORIGIN not in origins:
+            origins.append(Config.LOCALHOST_ORIGIN)
+        if Config.LOOPBACK_ORIGIN not in origins:
+            origins.append(Config.LOOPBACK_ORIGIN)
         return origins
 
     CORS_ORIGINS = _parse_cors_origins(os.getenv("CORS_ORIGINS"))

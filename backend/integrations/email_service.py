@@ -118,21 +118,13 @@ class EmailService:
             print(f"[Gmail API Debug] Traceback: {traceback.format_exc()}")
             return False
 
-    def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
-        """Send an email via Gmail API (if configured) or SMTP. Returns True on success, False otherwise."""
-        
-        # Try Gmail API first if configured
-        if config.GMAIL_REFRESH_TOKEN:
-            print(f"[EmailService] Attempting Gmail API send...")
-            if self._send_via_gmail_api(to_address, subject, body, html):
-                return True
-            else:
-                print(f"[EmailService] Gmail API failed, falling back to SMTP...")
-        
-        # Fall back to SMTP
+    def _send_via_smtp(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
+        """Send email via SMTP. Returns True on success, False otherwise."""
         try:
-            # Debug: log SMTP config at send time
-            print(f"[SMTP Debug] Host: {self.smtp_host}, Connect host: {self.smtp_connect_host}, Port: {self.smtp_port}, User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}")
+            print(
+                f"[SMTP Debug] Host: {self.smtp_host}, Connect host: {self.smtp_connect_host}, Port: {self.smtp_port}, "
+                f"User: {self.smtp_user[:20] if self.smtp_user else 'EMPTY'}, Pass set: {bool(self.smtp_pass)}, TLS: {self.use_tls}"
+            )
 
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
@@ -156,7 +148,7 @@ class EmailService:
                 print(f"[SMTP Debug] Logging in as {self.smtp_user[:20]}...")
                 server.login(self.smtp_user, self.smtp_pass)
             elif self.smtp_pass and not self.smtp_user:
-                print(f"[SMTP Debug] Logging in with from_email and password...")
+                print("[SMTP Debug] Logging in with from_email and password...")
                 server.login(self.from_email or self.from_address, self.smtp_pass)
             else:
                 print(f"[SMTP Debug] WARNING: No credentials provided (user: {bool(self.smtp_user)}, pass: {bool(self.smtp_pass)})")
@@ -171,6 +163,17 @@ class EmailService:
             print(f"⚠ Error sending email to {to_address}: {e}")
             print(f"[SMTP Debug] Traceback: {traceback.format_exc()}")
             return False
+
+    def send_email(self, to_address: str, subject: str, body: str, html: bool = False) -> bool:
+        """Send an email via Gmail API (if configured) or SMTP. Returns True on success, False otherwise."""
+
+        if config.GMAIL_REFRESH_TOKEN:
+            print("[EmailService] Attempting Gmail API send...")
+            if self._send_via_gmail_api(to_address, subject, body, html):
+                return True
+            print("[EmailService] Gmail API failed, falling back to SMTP...")
+
+        return self._send_via_smtp(to_address, subject, body, html)
 
 
 if __name__ == '__main__':
