@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import {
@@ -29,12 +29,12 @@ import {
   approveContent,
   bulkApproveContent,
   getCampaignByEvent,
+  getCampaigns,
   generateCampaign,
   getCampaignDetail,
   getEventDetail,
   getIntegrationsStatus,
   publishEmail,
-  publishLinkedIn,
   publishWhatsApp,
   publishTelegram,
   type IntegrationStatus,
@@ -163,6 +163,20 @@ function groupDraftsByPlatform(content: BackendContentItem[]) {
   return byPlatform
 }
 
+function buildDraftState(detail: BackendCampaignDetail | null) {
+  const grouped = groupDraftsByPlatform(detail?.content || [])
+  const selectedVariationByPlatform: Record<string, number> = {}
+  const generationLengthByPlatform: Record<string, ContentLength> = {}
+
+  for (const platform of Object.keys(grouped)) {
+    const drafts = grouped[platform]
+    selectedVariationByPlatform[platform] = drafts[drafts.length - 1]?.variation_num || 1
+    generationLengthByPlatform[platform] = "medium"
+  }
+
+  return { selectedVariationByPlatform, generationLengthByPlatform }
+}
+
 export default function EventDetailPage() {
   const params = useParams<{ eventId?: string | string[] }>()
   const pathname = usePathname()
@@ -183,6 +197,7 @@ export default function EventDetailPage() {
   const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editedText, setEditedText] = useState<string>("")  
+  const autoGenerationPromiseRef = useRef<{ eventId: string; promise: Promise<BackendCampaignDetail> } | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -211,17 +226,25 @@ export default function EventDetailPage() {
           }
         }
 
+        if (!detail) {
+          if (!autoGenerationPromiseRef.current || autoGenerationPromiseRef.current.eventId !== eventId) {
+            autoGenerationPromiseRef.current = {
+              eventId,
+              promise: (async () => {
+                const generated = await generateCampaign(eventId, "medium")
+                return getCampaignDetail(generated.campaign_id)
+              })(),
+            }
+          }
+
+          detail = await autoGenerationPromiseRef.current.promise
+        }
+
         setCampaign(detail)
 
-        const grouped = groupDraftsByPlatform(detail?.content || [])
-        const initialSelection: Record<string, number> = {}
-        const initialLengths: Record<string, ContentLength> = {}
-        for (const platform of Object.keys(grouped)) {
-          initialSelection[platform] = grouped[platform][0]?.variation_num || 1
-          initialLengths[platform] = "medium"
-        }
-        setSelectedVariationByPlatform(initialSelection)
-        setGenerationLengthByPlatform(initialLengths)
+        const initialState = buildDraftState(detail)
+        setSelectedVariationByPlatform(initialState.selectedVariationByPlatform)
+        setGenerationLengthByPlatform(initialState.generationLengthByPlatform)
         setEventPublished(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load event")
@@ -246,6 +269,11 @@ export default function EventDetailPage() {
       })
       .filter(Boolean) as Array<{ platform: string; selected: BackendContentItem; drafts: BackendContentItem[] }>
   }, [draftsByPlatform, selectedVariationByPlatform])
+
+  const publishableDrafts = useMemo(
+    () => selectedDrafts.filter((draft) => draft.selected.platform !== "linkedin"),
+    [selectedDrafts]
+  )
 
   const lifecycleSteps = useMemo(() => getLifecycleSteps(event), [event])
 
@@ -311,9 +339,9 @@ export default function EventDetailPage() {
               onClick={async () => {
                 try {
                   setWorkingPlatform("event")
-                  const ids = selectedDrafts.map((item) => item.selected.id)
+                  const ids = publishableDrafts.map((item) => item.selected.id)
                   if (!ids.length) return
-                  const pendingIds = selectedDrafts
+                  const pendingIds = publishableDrafts
                     .filter((item) => item.selected.approval_status !== "approved")
                     .map((item) => item.selected.id)
 
@@ -321,12 +349,9 @@ export default function EventDetailPage() {
                     await bulkApproveContent(pendingIds, defaultActor)
                   }
 
-                  for (const draft of selectedDrafts) {
+                  for (const draft of publishableDrafts) {
                     if (draft.selected.platform === "email") {
                       await publishEmail(draft.selected.id, DEFAULT_EMAIL_RECIPIENT, true)
-                    }
-                    if (draft.selected.platform === "linkedin") {
-                      await publishLinkedIn(draft.selected.id)
                     }
                     if (draft.selected.platform === "whatsapp") {
                       await publishWhatsApp(draft.selected.id, resolveWhatsAppRecipient())
@@ -349,40 +374,15 @@ export default function EventDetailPage() {
                   setWorkingPlatform(null)
                 }
               }}
-              disabled={workingPlatform === "event" || eventPublished}
+              disabled={workingPlatform === "event" || eventPublished || publishableDrafts.length === 0}
             >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               {eventPublished ? "Published" : "Publish drafts"}
             </Button>
           ) : (
-            <Button
-              onClick={async () => {
-                try {
-                  setWorkingPlatform("event")
-                  const generated = await generateCampaign(event.id, "medium")
-                  const refreshed = await getCampaignDetail(generated.campaign_id)
-                  setCampaign(refreshed)
-
-                  const grouped = groupDraftsByPlatform(refreshed.content)
-                  const initialSelection: Record<string, number> = {}
-                  const initialLengths: Record<string, ContentLength> = {}
-                  for (const platform of Object.keys(grouped)) {
-                    initialSelection[platform] = grouped[platform][0]?.variation_num || 1
-                    initialLengths[platform] = "medium"
-                  }
-                  setSelectedVariationByPlatform(initialSelection)
-                  setGenerationLengthByPlatform(initialLengths)
-                  setEventPublished(false)
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Failed to generate drafts")
-                } finally {
-                  setWorkingPlatform(null)
-                }
-              }}
-              disabled={workingPlatform === "event"}
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Generate drafts
+            <Button disabled>
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              Preparing drafts...
             </Button>
           )}
         </div>
@@ -498,6 +498,7 @@ export default function EventDetailPage() {
               const generationLength = generationLengthByPlatform[platform] || "medium"
               const isSent = !!approvedDraftIds[selected.id]
               const isApproved = selected.approval_status === "approved"
+              const isLinkedInLocked = platform === "linkedin"
 
               return (
                 <div key={platform} className="flex h-full flex-col rounded-2xl border bg-background/70 p-4 shadow-sm">
@@ -511,7 +512,7 @@ export default function EventDetailPage() {
                         {currentVariation} / {maxVariation}
                       </Badge>
                     </div>
-                    {isApproved && <Badge>{isSent ? "Sent" : "Approved"}</Badge>}
+                    {isLinkedInLocked ? <Badge variant="outline">Coming soon</Badge> : isApproved && <Badge>{isSent ? "Sent" : "Approved"}</Badge>}
                   </div>
 
                   <div className="mt-4 space-y-2 rounded-xl border bg-muted/20 p-4">
@@ -574,139 +575,135 @@ export default function EventDetailPage() {
                   </div>
 
                   <div className="mt-4 space-y-3">
-                    <div className="space-y-2">
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Generation length
-                      </div>
-                      <Select
-                        value={generationLength}
-                        onValueChange={(value) =>
-                          setGenerationLengthByPlatform((state) => ({
-                            ...state,
-                            [platform]: value as ContentLength,
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue placeholder="Choose length" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="short">Short</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="long">Long</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          try {
-                            setWorkingPlatform(platform)
-                            const currentIndex = selectedVariationByPlatform[platform] || 1
-                            if (currentIndex < maxVariation) {
-                              setSelectedVariationByPlatform((state) => ({
-                                ...state,
-                                [platform]: currentIndex + 1,
-                              }))
-                            } else {
-                              // Request generation for the event (may append to existing draft campaign)
-                              const genResp = await generateCampaign(event.id, generationLength)
-
-                              // Determine campaign id: prefer backend response, otherwise find latest campaign for event
-                              let campaignId = genResp?.campaign_id
-                              if (!campaignId) {
-                                try {
-                                  const summaries = await getCampaigns(50)
-                                  const found = summaries.find((s) => s.event_id === event.id)
-                                  campaignId = found?.id
-                                } catch (e) { console.error("Failed to auto-locate campaign:", e) }
-                              }
-
-                              if (!campaignId) throw new Error('Failed to locate campaign after generation')
-
-                              const freshDetail = await getCampaignDetail(campaignId)
-                              setCampaign(freshDetail)
-
-                              // Recompute grouping and select newest variation for each platform
-                              const grouped = groupDraftsByPlatform(freshDetail.content)
-                              const nextSelection: Record<string, number> = {}
-                              const nextLengths: Record<string, ContentLength> = {}
-                              for (const key of Object.keys(grouped)) {
-                                const list = grouped[key] || []
-                                const last = list.at(-1)
-                                nextSelection[key] = last?.variation_num || 1
-                                // preserve any per-platform user selection length; default to medium
-                                nextLengths[key] = generationLengthByPlatform[key] || 'medium'
-                              }
-
-                              setSelectedVariationByPlatform(nextSelection)
+                    {isLinkedInLocked ? (
+                      <Button size="sm" variant="outline" disabled className="w-fit">
+                        Coming soon
+                      </Button>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Generation length
+                          </div>
+                          <Select
+                            value={generationLength}
+                            onValueChange={(value) =>
                               setGenerationLengthByPlatform((state) => ({
                                 ...state,
-                                ...nextLengths,
+                                [platform]: value as ContentLength,
                               }))
-                              setApprovedDraftIds({})
-                              setEventPublished(false)
                             }
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : "Failed to generate new version")
-                          } finally {
-                            setWorkingPlatform(null)
-                          }
-                        }}
-                        disabled={workingPlatform === platform}
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        {workingPlatform === platform ? "Generating..." : "Generate new version"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            setWorkingPlatform(platform)
-                            if (selected.approval_status !== "approved") {
-                              await approveContent(selected.id, defaultActor)
-                            }
-                            if (selected.platform === "email") {
-                              await publishEmail(selected.id, DEFAULT_EMAIL_RECIPIENT, true)
-                            }
-                            if (selected.platform === "linkedin") {
-                              await publishLinkedIn(selected.id)
-                            }
-                            if (selected.platform === "whatsapp") {
-                              await publishWhatsApp(selected.id, resolveWhatsAppRecipient())
-                            }
-                            if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
-                              await publishTelegram(selected.id)
-                            }
-                            const refreshed = await getCampaignDetail(campaign.campaign.id)
-                            setCampaign(refreshed)
-                            setApprovedDraftIds((state) => ({ ...state, [selected.id]: true }))
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : "Failed to approve draft")
-                          } finally {
-                            setWorkingPlatform(null)
-                          }
-                        }}
-                        disabled={workingPlatform === platform || isSent}
-                      >
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        {getPrimaryActionLabel(isSent, selected.platform)}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setEditingId(selected.id)
-                          setEditedText(selected.content_text)
-                        }}
-                        disabled={isSent}
-                      >
-                        Edit
-                      </Button>
-                    </div>
+                          >
+                            <SelectTrigger className="w-full sm:w-[180px]">
+                              <SelectValue placeholder="Choose length" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="short">Short</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="long">Long</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                setWorkingPlatform(platform)
+                                const genResp = await generateCampaign(event.id, generationLength)
+
+                                let campaignId: string | undefined = genResp?.campaign_id
+                                if (!campaignId) {
+                                  try {
+                                    const summaries = await getCampaigns(50)
+                                    const found = summaries.find((summary) => summary.event_id === event.id)
+                                    campaignId = found?.id
+                                  } catch (lookupError) {
+                                    console.error("Failed to auto-locate campaign:", lookupError)
+                                  }
+                                }
+
+                                if (!campaignId) throw new Error("Failed to locate campaign after generation")
+
+                                const resolvedCampaignId = campaignId as string
+                                const freshDetail = await getCampaignDetail(resolvedCampaignId)
+                                setCampaign(freshDetail)
+
+                                const grouped = groupDraftsByPlatform(freshDetail.content)
+                                const nextSelection: Record<string, number> = {}
+                                const nextLengths: Record<string, ContentLength> = {}
+                                for (const key of Object.keys(grouped)) {
+                                  const list = grouped[key] || []
+                                  const last = list[list.length - 1]
+                                  nextSelection[key] = last?.variation_num || 1
+                                  nextLengths[key] = generationLengthByPlatform[key] || "medium"
+                                }
+
+                                setSelectedVariationByPlatform(nextSelection)
+                                setGenerationLengthByPlatform((state) => ({
+                                  ...state,
+                                  ...nextLengths,
+                                }))
+                                setApprovedDraftIds({})
+                                setEventPublished(false)
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : "Failed to generate new version")
+                              } finally {
+                                setWorkingPlatform(null)
+                              }
+                            }}
+                            disabled={workingPlatform === platform}
+                          >
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            {workingPlatform === platform ? "Generating..." : "Generate new version"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                setWorkingPlatform(platform)
+                                if (selected.approval_status !== "approved") {
+                                  await approveContent(selected.id, defaultActor)
+                                }
+                                if (selected.platform === "email") {
+                                  await publishEmail(selected.id, DEFAULT_EMAIL_RECIPIENT, true)
+                                }
+                                if (selected.platform === "whatsapp") {
+                                  await publishWhatsApp(selected.id, resolveWhatsAppRecipient())
+                                }
+                                if (selected.platform === "telegram" && (integrations?.telegram?.configured ?? false)) {
+                                  await publishTelegram(selected.id)
+                                }
+                                const refreshed = await getCampaignDetail(campaign.campaign.id)
+                                setCampaign(refreshed)
+                                setApprovedDraftIds((state) => ({ ...state, [selected.id]: true }))
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : "Failed to approve draft")
+                              } finally {
+                                setWorkingPlatform(null)
+                              }
+                            }}
+                            disabled={workingPlatform === platform || isSent}
+                          >
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            {getPrimaryActionLabel(isSent, selected.platform)}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditingId(selected.id)
+                              setEditedText(selected.content_text)
+                            }}
+                            disabled={isSent}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-4 rounded-xl border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">

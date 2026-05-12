@@ -8,7 +8,38 @@ const API_BASE_URL =
   normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL) ||
   "https://aevum-ai.onrender.com/api" // fallback to deployed Render backend API
 
+// Simple response cache with TTL (time-to-live)
+const responseCache = new Map<string, { data: any; timestamp: number }>()
+const CACHE_TTL_MS = 30000 // 30 seconds
+
+function getCacheKey(endpoint: string, options?: RequestInit): string {
+  return `${endpoint}:${JSON.stringify(options?.body || "")}`
+}
+
+function getCachedResponse<T>(cacheKey: string): T | null {
+  const cached = responseCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data
+  }
+  responseCache.delete(cacheKey)
+  return null
+}
+
+function setCachedResponse<T>(cacheKey: string, data: T): void {
+  responseCache.set(cacheKey, { data, timestamp: Date.now() })
+}
+
 async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method || "GET").toUpperCase()
+  // Check cache for GET requests
+  if (method === "GET") {
+    const cacheKey = getCacheKey(endpoint, options)
+    const cached = getCachedResponse<T>(cacheKey)
+    if (cached) {
+      return cached
+    }
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     headers: {
       "Content-Type": "application/json",
@@ -20,7 +51,7 @@ async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T
   if (!response.ok) {
     let message = `API Error: ${response.status} ${response.statusText}`
     try {
-      const errorBody = await response.json()
+      const errorBody = await response.json() as any
       message = errorBody?.detail || errorBody?.message || message
     } catch {
       // Ignore JSON parsing errors and fall back to the status text.
@@ -28,7 +59,17 @@ async function requestApi<T>(endpoint: string, options?: RequestInit): Promise<T
     throw new Error(message)
   }
 
-  return response.json()
+  const data = (await response.json()) as T
+  
+  // Cache successful GET responses; mutations invalidate stale cached reads.
+  if (method === "GET") {
+    const cacheKey = getCacheKey(endpoint, options)
+    setCachedResponse(cacheKey, data)
+  } else {
+    clearCache()
+  }
+
+  return data
 }
 
 export type BackendEvent = {
@@ -235,4 +276,47 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     pendingApprovals,
     integrations,
   }
+}
+
+// Cache management utilities
+export function clearCache(): void {
+  responseCache.clear()
+}
+
+export function clearCachePattern(pattern: string): void {
+  const keysToDelete: string[] = []
+  responseCache.forEach((_, key) => {
+    if (key.includes(pattern)) {
+      keysToDelete.push(key)
+    }
+  })
+  keysToDelete.forEach((key) => responseCache.delete(key))
+}
+
+// Utility for parallel event and campaign fetching
+export async function getEventsWithCampaigns(eventLimit = 20): Promise<Array<BackendEvent & { campaign?: BackendCampaignDetail | null }>> {
+  const events = await getEvents(eventLimit)
+  
+  // Fetch campaigns in parallel (but limited to avoid overwhelming the server)
+  const campaignPromises = events.slice(0, 10).map(async (event) => {
+    try {
+      const campaign = await getCampaignByEvent(event.id).catch(() => null)
+      return { ...event, campaign }
+    } catch {
+      return { ...event, campaign: null }
+    }
+  })
+  
+  const eventsWithCampaigns = await Promise.allSettled(campaignPromises)
+  return eventsWithCampaigns
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => (result as PromiseFulfilledResult<any>).value)
+}
+
+// Utility for sync events without blocking UI
+export async function syncEventsInBackground(): Promise<{ status: string; events_synced: number }> {
+  return requestApi(
+    "/events/sync",
+    { method: "POST" }
+  )
 }

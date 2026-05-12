@@ -10,7 +10,7 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 
 def init_db():
-    """Initialize database schema"""
+    """Initialize database schema with performance indexes"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -86,6 +86,35 @@ def init_db():
             FOREIGN KEY (content_id) REFERENCES generated_content(id)
         )
     """)
+    
+    # Create indexes for frequently queried columns
+    # Events indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_lifecycle_stage ON events(lifecycle_stage)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_start_time ON events(start_time)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC)")
+    
+    # Campaigns indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_event_id ON campaigns(event_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_created_at ON campaigns(created_at DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_event_status ON campaigns(event_id, status)")
+    
+    # Generated content indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_campaign_id ON generated_content(campaign_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_platform ON generated_content(platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_approval_status ON generated_content(approval_status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_status ON generated_content(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_campaign_platform ON generated_content(campaign_id, platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_content_approval_created ON generated_content(approval_status, created_at DESC)")
+    
+    # Approvals indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_approvals_content_id ON approvals(content_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_approvals_created_at ON approvals(created_at DESC)")
+    
+    # Analytics indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_analytics_platform ON analytics(platform)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_analytics_content_id ON analytics(content_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_analytics_status ON analytics(status)")
     
     conn.commit()
     conn.close()

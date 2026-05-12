@@ -65,7 +65,8 @@ export default function EventsPage() {
   const load = async () => {
     try {
       setError(null)
-      const data = await getEvents(50)
+      // Load events with pagination (20 per load, instead of 50)
+      const data = await getEvents(20)
       setEvents(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load events")
@@ -230,7 +231,7 @@ export default function EventsPage() {
                                         e.stopPropagation()
                                         try {
                                           setWorkingId(item.id)
-                                          const gen = await generateCampaign(event.id, variationLength)
+                                          const gen = await generateCampaign(event.id, "medium")
                                           if (gen?.campaign_id) {
                                             const camp = await getCampaignDetail(gen.campaign_id)
                                             setCampaignsByEvent((s) => ({ ...s, [event.id]: camp }))

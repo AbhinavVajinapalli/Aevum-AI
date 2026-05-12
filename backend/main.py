@@ -11,6 +11,9 @@ import base64
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+import asyncio
+from functools import lru_cache
+import threading
 
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -68,6 +71,10 @@ telegram_service = TelegramService()
 linkedin_pkce_store: Dict[str, str] = {}
 # Initialize WhatsApp service (Twilio)
 whatsapp_service = WhatsAppService()
+
+# Simple response cache (in-memory with TTL)
+_response_cache: Dict[str, tuple] = {}
+_cache_ttl = 30  # seconds
 
 
 # ============================================================================
@@ -217,13 +224,19 @@ async def startup_event():
     print(f"[SMTP Config] Username: {config.SMTP_USERNAME[:20] if config.SMTP_USERNAME else '(EMPTY)'}")
     print(f"[SMTP Config] Password set: {bool(config.SMTP_PASSWORD)}")
     print(f"[SMTP Config] DEFAULT_ACCOUNT_EMAIL: {config.DEFAULT_ACCOUNT_EMAIL}")
-    print("✓ Syncing events from Google Calendar...")
-    try:
-        calendar_service.fetch_and_sync_events()
-    except Exception as e:
-        print(f"⚠ Calendar sync skipped: {e}")
     # Start background scheduler for autonomous campaign generation
     scheduler_service.start()
+    
+    # Sync events in background without blocking startup
+    def sync_calendar_async():
+        print("✓ Syncing events from Google Calendar in background...")
+        try:
+            calendar_service.fetch_and_sync_events()
+        except Exception as e:
+            print(f"⚠ Calendar sync skipped: {e}")
+    
+    sync_thread = threading.Thread(target=sync_calendar_async, daemon=True)
+    sync_thread.start()
 
 
 @app.on_event("shutdown")
@@ -282,7 +295,7 @@ async def get_events(
     stage: Optional[str] = Query(None, pattern="^(pre_event|during_event|post_event)$")
 ):
     """
-    Get events from database
+    Get events from database with pagination (default limit 10, max 100)
     Optional filter by lifecycle stage
     """
     try:
@@ -521,16 +534,26 @@ async def generate_campaign(event_id: str, content_length: str = "medium"):
     responses={500: {"description": "Internal server error"}}
 )
 async def list_campaigns(limit: int = Query(50, ge=1, le=500)):
-    """Get all campaigns with summary info"""
+    """Get all campaigns with summary info (optimized with single query)"""
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
+        # Use single optimized query with aggregation
         cursor.execute("""
-            SELECT c.*, e.title as event_name, e.lifecycle_stage
+            SELECT 
+                c.id, c.event_id, c.stage, c.status, c.metadata, 
+                c.created_at, c.updated_at,
+                e.title as event_name, e.lifecycle_stage,
+                COUNT(gc.id) as content_count,
+                SUM(CASE WHEN gc.approval_status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN gc.approval_status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+                SUM(CASE WHEN gc.approval_status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
             FROM campaigns c
             LEFT JOIN events e ON c.event_id = e.id
+            LEFT JOIN generated_content gc ON c.id = gc.campaign_id
+            GROUP BY c.id
             ORDER BY c.created_at DESC
             LIMIT ?
         """, (limit,))
@@ -538,23 +561,14 @@ async def list_campaigns(limit: int = Query(50, ge=1, le=500)):
         campaigns_list = []
         for row in cursor.fetchall():
             campaign = dict(row)
-            # Get content count and status breakdown
-            cursor.execute("""
-                SELECT approval_status, COUNT(*) as count
-                FROM generated_content
-                WHERE campaign_id = ?
-                GROUP BY approval_status
-            """, (campaign['id'],))
-            
-            status_breakdown = {}
-            content_count = 0
-            for status_row in cursor.fetchall():
-                status = dict(status_row)
-                status_breakdown[status['approval_status']] = status['count']
-                content_count += status['count']
-            
-            campaign['content_count'] = content_count
-            campaign['status_breakdown'] = status_breakdown
+            campaign['status_breakdown'] = {
+                'pending': campaign.get('pending_count', 0) or 0,
+                'approved': campaign.get('approved_count', 0) or 0,
+                'rejected': campaign.get('rejected_count', 0) or 0
+            }
+            # Remove individual count columns
+            for key in ['pending_count', 'approved_count', 'rejected_count']:
+                campaign.pop(key, None)
             campaigns_list.append(campaign)
         
         conn.close()
@@ -742,7 +756,7 @@ async def reject_content(content_id: str, reason: str = ""):
     responses={500: {"description": "Internal server error"}}
 )
 async def get_pending_approvals(limit: int = Query(20, ge=1, le=100)):
-    """Get all pending content awaiting approval"""
+    """Get all pending content awaiting approval (optimized with indexes)"""
     try:
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -1116,28 +1130,29 @@ async def linkedin_oauth_callback(code: Optional[str] = None, state: Optional[st
     responses={500: {"description": "Internal server error"}}
 )
 async def get_analytics():
-    """Get basic analytics"""
+    """Get basic analytics (optimized single query)"""
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        # Count metrics
-        cursor.execute("SELECT COUNT(*) as count FROM events")
-        total_events = cursor.fetchone()[0]
+        # Single aggregated query for all metrics
+        cursor.execute("""
+            SELECT 
+                (SELECT COUNT(*) FROM events) as total_events,
+                (SELECT COUNT(*) FROM campaigns) as total_campaigns,
+                (SELECT COUNT(*) FROM generated_content WHERE approval_status = 'approved') as approved_content,
+                (SELECT COUNT(*) FROM generated_content WHERE approval_status = 'pending') as pending_content,
+                (SELECT COUNT(*) FROM analytics WHERE status = 'sent') as content_sent
+        """)
         
-        cursor.execute("SELECT COUNT(*) as count FROM campaigns")
-        total_campaigns = cursor.fetchone()[0]
+        result = cursor.fetchone()
+        total_events = result[0] or 0
+        total_campaigns = result[1] or 0
+        approved_content = result[2] or 0
+        pending_content = result[3] or 0
+        content_sent = result[4] or 0
         
-        cursor.execute("SELECT COUNT(*) as count FROM generated_content WHERE approval_status = 'approved'")
-        approved_content = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) as count FROM generated_content WHERE approval_status = 'pending'")
-        pending_content = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) as count FROM analytics WHERE status = 'sent'")
-        content_sent = cursor.fetchone()[0]
-        
-        # Platform breakdown
+        # Platform breakdown (still needs separate query as it has GROUP BY)
         cursor.execute("SELECT platform, COUNT(*) as count FROM generated_content GROUP BY platform")
         platform_breakdown = {row[0]: row[1] for row in cursor.fetchall()}
         
