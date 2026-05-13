@@ -54,4 +54,3 @@ Deploy
 Need more?
 
 - See full architecture, flows, and tradeoffs: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Want me to open a separate `docs/DEPLOY.md` or CI config? Reply and I’ll add it.
